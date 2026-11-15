@@ -217,9 +217,27 @@ def test_resolve_ca_certificate(tmp_path):
     found_ca = resolve_ca_certificate(search_dirs=[str(ca_dir)])
     assert found_ca == str(ca_file)
 
-    # Explicit ca_path
+    # Explicit ca_path (with no search dirs, since this fork ships a bundled
+    # custom_components/vidaa/certs/remote_ca.pem that the default walk finds)
     assert resolve_ca_certificate(ca_path=str(ca_file)) == str(ca_file)
-    assert resolve_ca_certificate(ca_path="/nonexistent/path.pem") is None
+    assert resolve_ca_certificate(ca_path="/nonexistent/path.pem", search_dirs=[]) is None
+
+
+def test_bundled_certificates_are_discovered():
+    """This fork ships the universal VIDAA client cert inside the package.
+
+    The default resolvers must find the bundled PEM pair and CA root via the
+    package-root walk, so a fresh install needs zero certificate setup.
+    """
+    cert, key = resolve_certificates(auth_profile="modern")
+    assert cert and key
+    assert os.path.isfile(cert) and os.path.isfile(key)
+    assert os.path.dirname(cert).endswith(os.path.join("vidaa", "certs"))
+    assert os.path.dirname(key).endswith(os.path.join("vidaa", "certs"))
+
+    ca = resolve_ca_certificate()
+    assert ca and os.path.isfile(ca)
+    assert ca.endswith("remote_ca.pem")
 
 
 def test_extract_el_pkcs12_and_resolve(tmp_path):

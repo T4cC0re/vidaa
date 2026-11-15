@@ -56,12 +56,17 @@ DEFAULT_REFRESH_IN_STANDBY = False
 DEFAULT_INCLUDE_APPS_IN_SOURCES = True
 DEFAULT_ENABLE_MEDIA_CONTROLS = False
 DEFAULT_ENABLE_CEC_NAMES = False
-DEFAULT_ENABLE_PICTURE_CONTROLS = False
-DEFAULT_ENABLE_SOUND_CONTROLS = False
+# Enabled by default in this fork: validated against the Hisense U7NQ
+# (VIDAA 2024/2025 generation), which exposes the picture/sound setting trees.
+DEFAULT_ENABLE_PICTURE_CONTROLS = True
+DEFAULT_ENABLE_SOUND_CONTROLS = True
 DEFAULT_ENABLE_AUDIO_ONLY = False
 DEFAULT_KEY_DELAY = 0.2
 DEFAULT_KEY_REPEAT = 1
-DEFAULT_AUTH_PROFILE = "auto"
+# The U7NQ generation (and any 2024/2025 VIDAA model) accepts the modern
+# XOR-dynamic pairing with the 2024-generation client cert (verified: rc=0).
+# Other models can still override per-entry in the config/options flow.
+DEFAULT_AUTH_PROFILE = "modern"
 DEFAULT_USE_SSL = True
 
 CONF_PLAYBACK_DEBOUNCE = "playback_debounce"

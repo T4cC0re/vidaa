@@ -138,8 +138,11 @@ async def test_select_and_number_platforms_lifecycle(mock_client, mock_entry, mo
     mock_reg.async_get_entity_id.return_value = None
     monkeypatch.setattr("homeassistant.helpers.entity_registry.async_get", lambda h: mock_reg)
 
-    # 1. Default options: picture and sound controls disabled
-    mock_entry.options = {}
+    # 1. Explicitly disabled options: picture and sound controls off (the fork default is enabled)
+    mock_entry.options = {
+        CONF_ENABLE_PICTURE_CONTROLS: False,
+        CONF_ENABLE_SOUND_CONTROLS: False,
+    }
     default_select_entities = []
     await async_setup_select(hass, mock_entry, lambda entities: default_select_entities.extend(entities))
     assert len(default_select_entities) == 0

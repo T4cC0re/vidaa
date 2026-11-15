@@ -191,20 +191,20 @@ async def test_entry_lifecycle_setup_and_unload(mock_entry, mock_client, monkeyp
     hass.config_entries.async_loaded_entries = MagicMock(side_effect=lambda domain: list(loaded_entries))
     hass.config_entries.async_entries = MagicMock(side_effect=lambda domain: list(loaded_entries))
 
-    # 1. Setup entry with remote enabled and picture_controls disabled
+    # 1. Setup entry with remote enabled; picture controls fall back to the fork default (enabled)
     mock_entry.options = {"enable_remote": True}
     result = await async_setup_entry(hass, mock_entry)
     assert result is True
 
-    # Forward entry setups should have received 7 platforms (excluding number)
-    expected_platforms = ["media_player", "sensor", "binary_sensor", "button", "switch", "select", "remote"]
+    # Forward entry setups should have received 8 platforms (number included, since picture controls default to enabled in this fork)
+    expected_platforms = ["media_player", "sensor", "binary_sensor", "button", "switch", "select", "number", "remote"]
     hass.config_entries.async_forward_entry_setups.assert_awaited_once_with(mock_entry, expected_platforms)
     assert mock_entry.runtime_data.platforms == expected_platforms
 
     # 2. Unload entry
     unload_result = await async_unload_entry(hass, mock_entry)
     assert unload_result is True
-    # Unload platforms must ONLY be called with the 7 loaded platforms, never all PLATFORMS
+    # Unload platforms must ONLY be called with the 8 loaded platforms, never all PLATFORMS
     hass.config_entries.async_unload_platforms.assert_awaited_once_with(mock_entry, expected_platforms)
     assert mock_client.disconnect.called or mock_client.async_disconnect.called
 
