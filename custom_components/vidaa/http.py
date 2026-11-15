@@ -63,6 +63,9 @@ def summarize_report(report: dict[str, Any]) -> list[str]:
     ua = str(report.get("ua", ""))[:160]
     lines.append(f"  ua: {ua}")
     lines.append(f"  transports: {json.dumps(report.get('bridge_http', {}))[:200]} wss={str(report.get('wss9888'))[:40]}")
+    lines.append(f"  get_reach: {json.dumps(report.get('get_reach', {}), default=str)[:400]}")
+    lines.append(f"  ws_start: {json.dumps(report.get('ws_start', []), default=str)[:500]}")
+    lines.append(f"  http_svc: {json.dumps(report.get('http_svc', {}), default=str)[:600]}")
     initial = report.get("services", {}).get("initialData") if isinstance(report.get("services"), dict) else None
     lines.append(f"  initialData: {json.dumps(initial, default=str)[:300]}")
     lines.append(f"  fileread_variant: {report.get('fileread_variant')}")
@@ -119,6 +122,10 @@ def build_report_summary(report: dict[str, Any], received: str) -> dict[str, Any
         "t": str(report.get("t", ""))[:40],
         "ua": str(report.get("ua", ""))[:160],
         "bridge_http": _bounded_dict(report.get("bridge_http"), 10, 200),
+        "transport_get": _bounded_dict(report.get("get_reach"), 8, 150),
+        "http_svc": _bounded_dict(report.get("http_svc"), 8, 250),
+        "ws_start": [str(json.dumps(w, default=str))[:200] for w in (report.get("ws_start") or [])[:8]]
+        if isinstance(report.get("ws_start"), list) else [],
         "wss9888": str(report.get("wss9888"))[:80],
         "fileread_variant": str(report.get("fileread_variant"))[:40],
         "reads": clipped_reads,

