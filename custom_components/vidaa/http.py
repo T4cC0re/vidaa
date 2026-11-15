@@ -94,9 +94,12 @@ async def async_setup_bridge_http(hass: HomeAssistant) -> bool:
     if hass.data.get(DOMAIN, {}).get("bridge_http_registered"):
         return True
     try:
-        from homeassistant.components.http import HomeAssistantView
+        try:
+            from homeassistant.components.http import HomeAssistantView
+        except ImportError:
+            from homeassistant.components.http.view import HomeAssistantView
     except ImportError:
-        _LOGGER.debug("HTTP component unavailable; bridge views not registered")
+        _LOGGER.warning("HomeAssistantView unavailable; %s is not being served", BRIDGE_PAGE_PATH)
         return False
 
     class VidaaBridgePageView(HomeAssistantView):
