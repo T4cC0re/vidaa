@@ -45,6 +45,11 @@ certs/
 *.jks
 credentials.json
 
+# Exception: the vendor-shared VIDAA app client certificate bundled with the
+# integration itself (public, same keystore every official app ships).
+!custom_components/vidaa/certs/
+!custom_components/vidaa/certs/**
+
 # Backups & Temp files
 *.bak*
 *.swp
