@@ -23,12 +23,12 @@ Security notes (by design, read before changing):
   inside a fixed interpreter. Tasks are queued with
   ``PUT /vidaa/exploit/task`` + page key and are validated server-side
   against the same read-only service/API allowlist the page enforces.
-- Gated maintenance ops (explicit user consent, root-phase chain on the user's
+- Gated transport (explicit user consent, root-phase chain on the user's
   device): payload files under ``<config>/vidaa_bridge/payloads/`` served at
-  ``GET /vidaa/exploit/p/<name>`` (PUT + page key to store); a ``fetchFile``
-  task restricted to pulling ONLY those payloads into fixed chain targets;
-  and an ``fn`` task that may only invoke the two ``*/fetch/sw2`` superwatch
-  proxies with strict install(82)/uninstall(83) framing.
+  ``GET /vidaa/exploit/p/<name>`` (PUT + page key, name-regex + size capped).
+  WHAT may be fetched WHERE is client-side policy in the page interpreter
+  (allowlists + origin-pinning), so it is hot-swappable via the page PUT
+  without an integration restart.
 - Pages auto-reload: the task poll carries a djb2 hash of the served page and
   the page reloads itself when it changes.
 - Full reports are written to ``<config>/vidaa_bridge_report.json`` (for
@@ -75,36 +75,12 @@ BRIDGE_TASK_KEY = "bridge_task"
 BRIDGE_OVERRIDE_DIR = "vidaa_bridge"
 BRIDGE_OVERRIDE_FILE = "recon.html"
 
-# Server-side mirror of the page's read-only allowlist (defense in depth:
-# a task that tries a write-capable op is rejected here, not just in page JS).
-SVC_ALLOW: dict[str, tuple[str, ...]] = {
-    "tvinfo": ("initialData",),
-    "hiutils": ("getOSVersion", "getVersionStatus", "fileRead"),
-    "pkgmgr": ("getInstalledPkgs",),
-    "basic/fetcher": ("fetchFile",),
-}
-TASK_OPS = {"fileRead", "svc", "ws", "native", "globals", "enumerate", "sleep", "batch",
-            "jsapi", "fn"}
-JSAPI_GETTER_RE = r"^(?:Hisense_Get|His_get)[A-Za-z0-9_]{0,60}$"
-WS_METHOD_ALLOW = {"start", "callAPI"}
-WS_SVC_ALLOW = set(SVC_ALLOW) | {"basic/fetcher"}
-WS_PORTS = (9009, 9888)
-
-# --- gated maintenance ops (explicit user consent, root phase) -----------------
-# fetchFile is the documented chain primitive: it may ONLY download a payload
-# served by this integration's own /vidaa/exploit/p/ endpoint into one of the
-# exact chain targets. The page additionally pins the url to its own origin.
+# Client-side policy: all op semantics (service/API allowlists, getter-only
+# jsapi regex, fetchFile origin-pin and target list, ws framing gates) live in
+# the page interpreter under <config>/vidaa_bridge/recon.html — hot-swappable
+# with a PUT, no restart. Tasks are only structure checked here (transport).
 PAYLOAD_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 MAX_PAYLOAD_BYTES = 20 * 1024 * 1024
-PAYLOAD_PATH_MARK = "/vidaa/exploit/p/"
-FILE_WRITE_TARGETS = (
-    "/APPS/pkgs/tv.vidaa.jsservice.basic/CHA/functions/fetch/sw2.js",
-    "/APPS/pkgs/tv.vidaa.jsservice.system/CHA/functions/fetch/sw2.js",
-    "/APPS/pkgs/tv.vidaa.jsservice.system/current/functions/fetch/sw2.js",
-    "/APPS/installer.ipk",
-)
-FN_ALLOW = {"basic/fetch/sw2", "system/fetch/sw2"}
-SUPERWATCH_ITEM_RE = re.compile(r"^\d{1,3}:(82|83):\d{1,3}(;[A-Za-z0-9./;:_-]{0,120})?$")
 BRIDGE_PAYLOAD_DIR = "vidaa_bridge/payloads"
 
 PAGE_CSP = (
@@ -189,80 +165,17 @@ def get_bridge_page_key(hass: HomeAssistant) -> str | None:
     return key if isinstance(key, str) else None
 
 
-def validate_task(task: Any, depth: int = 0) -> str | None:
-    """Return None when the task only uses read-only allowlisted ops."""
-    if depth > 2 or not isinstance(task, dict):
-        return "task must be a JSON object (max depth 2)"
+def validate_task(task: Any) -> str | None:
+    """Structural gate only. All op POLICY lives client-side in the page
+    interpreter (hot-swappable via PUT); here we only sanity-check that the
+    task is a bounded JSON object with a plausible operation name."""
+    if not isinstance(task, dict):
+        return "task must be a JSON object"
     op = task.get("op")
-    if op not in TASK_OPS:
-        return f"op {op!r} not allowed"
-    if op == "svc":
-        svc, api = task.get("svc"), task.get("api")
-        if svc not in SVC_ALLOW or api not in SVC_ALLOW[svc]:
-            return f"svc call {svc}.{api} not allowed"
-        if svc == "basic/fetcher":
-            return _validate_fetch_args(task.get("args"))
-    elif op == "fileRead":
-        if not isinstance(task.get("path"), str):
-            return "fileRead needs a string path"
-    elif op == "native":
-        if task.get("api") != "fileRead":
-            return "native lane allows fileRead only"
-    elif op == "ws":
-        target = str(task.get("target", ""))
-        prefixes = tuple(f"{s}://{h}" for s in ("ws", "wss") for h in ("localhost", "127.0.0.1"))
-        if not target.startswith(prefixes) or not any(f":{p}" in target for p in WS_PORTS):
-            return "ws target must be ws(s)://(localhost|127.0.0.1):(9009|9888)"
-        messages = task.get("messages", [])
-        if not isinstance(messages, list) or len(messages) > 10:
-            return "ws messages must be a list of at most 10"
-        for msg in messages:
-            if not isinstance(msg, dict):
-                return "ws message must be an object"
-            if msg.get("method") not in WS_METHOD_ALLOW:
-                return f"ws method {msg.get('method')!r} not allowed"
-            path = str(msg.get("path", ""))
-            svc = path.removeprefix("phoenix://service/")
-            if svc not in WS_SVC_ALLOW:
-                return f"ws service {svc!r} not allowed"
-            if msg.get("method") == "start" and svc not in WS_SVC_ALLOW:
-                return "ws start service not allowed"
-            if msg.get("method") == "callAPI":
-                api = (msg.get("parameters") or {}).get("api")
-                if api == "fetchFile":
-                    return "fetchFile must go through the svc op (gated args), not ws"
-                if svc not in SVC_ALLOW or api not in SVC_ALLOW.get(svc, ()):
-                    return f"ws callAPI {svc}.{api} not allowed"
-    elif op == "jsapi":
-        fn = task.get("fn")
-        if not isinstance(fn, str) or not re.match(JSAPI_GETTER_RE, fn):
-            return "jsapi allows vendor getters only (Hisense_Get*/His_get*)"
-        if not isinstance(task.get("args", []), list):
-            return "jsapi args must be a list"
-    elif op == "fn":
-        if task.get("fnpath") not in FN_ALLOW:
-            return "fnpath not in allowlist"
-        items = task.get("list")
-        if not isinstance(items, list) or not 1 <= len(items) <= 4:
-            return "fn list must be 1-4 items"
-        for item in items:
-            if not isinstance(item, str) or not SUPERWATCH_ITEM_RE.match(item):
-                return "fn item must be '<session>:(82|83);<msg>' superwatch framing"
-    elif op == "sleep":
-        if not (isinstance(task.get("ms"), int) and 0 <= task["ms"] <= 10000):
-            return "sleep ms must be an int in [0, 10000]"
-    elif op == "enumerate":
-        if not isinstance(task.get("filter"), str) or len(task["filter"]) > 64:
-            return "enumerate needs a filter string (<=64 chars)"
-    elif op == "batch":
-        ops = task.get("ops")
-        if not isinstance(ops, list) or len(ops) > 20:
-            return "batch needs an ops list of at most 20"
-        for sub in ops:
-            reason = validate_task(sub, depth + 1)
-            if reason:
-                return reason
+    if not isinstance(op, str) or not 1 <= len(op) <= 40:
+        return "task needs a string op (<=40 chars)"
     return None
+
 
 
 def set_bridge_task(hass: HomeAssistant, task: dict[str, Any]) -> dict[str, Any]:
@@ -297,21 +210,6 @@ def next_bridge_task(hass: HomeAssistant, seen_rev: int) -> dict[str, Any] | Non
         cur["delivered"] = datetime.now(UTC).isoformat()
         _republish_bridge_entities(hass)
     return {"rev": cur["rev"], "task": cur.get("task")}
-
-
-def _validate_fetch_args(args: Any) -> str | None:
-    """fetchFile may only pull this instance's payload endpoint to an allowlisted target."""
-    if not isinstance(args, dict):
-        return "fetchFile needs an args object"
-    url = args.get("url")
-    if not isinstance(url, str) or not url.startswith("http://") or PAYLOAD_PATH_MARK not in url:
-        return "fetchFile url must be an http:// URL on this instance's /vidaa/exploit/p/ endpoint"
-    if args.get("directory") not in FILE_WRITE_TARGETS:
-        return "fetchFile directory is not an allowlisted chain target"
-    perm = args.get("permission", 420)
-    if not isinstance(perm, int) or isinstance(perm, bool) or not 0 <= perm <= 511:
-        return "fetchFile permission must be an int in [0, 511]"
-    return None
 
 
 def _payload_path(hass: HomeAssistant, name: str) -> Path | None:
