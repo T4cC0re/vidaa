@@ -143,6 +143,16 @@ def page_status(hass: HomeAssistant) -> dict[str, Any]:
     return meta
 
 
+def page_djb2(hass: HomeAssistant) -> str:
+    """Cheap rolling hash of the served page; the page compares it per poll and
+    self-reloads when it changes (non-secure-context browsers lack crypto.subtle)."""
+    html, _ = read_bridge_page(hass)
+    h = 5381
+    for byte in html.encode("utf-8"):
+        h = (h * 33 + byte) & 0xFFFFFFFF
+    return format(h, "08x")
+
+
 def get_bridge_page_key(hass: HomeAssistant) -> str | None:
     """Per-run key required to replace the page or queue a task via PUT."""
     data = getattr(hass, "data", None)
@@ -533,7 +543,9 @@ async def async_setup_bridge_http(hass: HomeAssistant) -> bool:
             except ValueError:
                 seen = 0
             pending = next_bridge_task(hass, seen)
-            return web.json_response(pending if pending else {"rev": 0, "task": None})
+            return web.json_response({"rev": 0, "task": None, "page_sha": page_djb2(hass)}
+                                     if pending is None else
+                                     {**pending, "page_sha": page_djb2(hass)})
 
         async def put(self, request: Any) -> Any:
             from aiohttp import web

