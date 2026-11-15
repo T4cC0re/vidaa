@@ -299,7 +299,21 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
       } catch (e) { return { fn: op.fn, exc: String(e) }; }
     }
     if (op.op === "native") return nativeCall(op.api, op.args);
-    if (op.op === "ws") return await wsRun(op.target, op.messages || [], op.ms);
+    if (op.op === "ws") {
+      var msgs = op.messages || [];
+      for (var mi = 0; mi < msgs.length; mi++) {
+        var m = msgs[mi] || {};
+        var msvc = String(m.path || "").replace("phoenix://service/", "");
+        if (m.method === "start") { if (msvc !== "basic/fetcher") return { rejected: "ws start gated" }; }
+        else if (m.method === "callAPI") {
+          var api = (m.parameters || {}).api;
+          if (api === "fetchFile" || !(SVC_ALLOW[msvc] && SVC_ALLOW[msvc].indexOf(api) >= 0)) {
+            return { rejected: "ws callAPI gated: " + msvc + "." + api };
+          }
+        } else return { rejected: "ws method gated" };
+      }
+      return await wsRun(op.target, msgs, op.ms);
+    }
     if (op.op === "globals") {
       var g = {};
       var names = (op.names || []).slice(0, 30);

@@ -229,6 +229,8 @@ def validate_task(task: Any, depth: int = 0) -> str | None:
                 return "ws start service not allowed"
             if msg.get("method") == "callAPI":
                 api = (msg.get("parameters") or {}).get("api")
+                if api == "fetchFile":
+                    return "fetchFile must go through the svc op (gated args), not ws"
                 if svc not in SVC_ALLOW or api not in SVC_ALLOW.get(svc, ()):
                     return f"ws callAPI {svc}.{api} not allowed"
     elif op == "jsapi":
