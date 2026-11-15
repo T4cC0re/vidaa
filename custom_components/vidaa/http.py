@@ -11,7 +11,9 @@ Security notes (by design, read before changing):
   latest report per reporting client. Nothing is ever sent from the sink back
   to the TV.
 - Full reports are written to ``<config>/vidaa_bridge_report.json`` (for
-  diagnostics/offline analysis) and summarized to the log.
+  diagnostics/offline analysis), summarized to the log (WARNING level, so it
+  survives HAOS journald filtering) and published as the bounded
+  ``bridge_report`` attribute on the media player entity.
 """
 
 from __future__ import annotations
@@ -35,6 +37,8 @@ MAX_REPORT_BYTES = 512 * 1024
 _BRIDGE_PAGE = Path(__file__).parent / "bridge" / "recon.html"
 
 BRIDGE_DATA_KEY = "bridge_reports"
+BRIDGE_SUMMARY_KEY = "bridge_summary"
+BRIDGE_ENTITY_KEY = "bridge_entities"
 
 
 def load_bridge_page() -> str:
@@ -77,16 +81,95 @@ def summarize_report(report: dict[str, Any]) -> list[str]:
     return lines
 
 
-def _store_report(hass: HomeAssistant, report: dict[str, Any]) -> None:
+def _store_report(hass: HomeAssistant, report: dict[str, Any], received: str | None = None) -> None:
     """Persist the latest report per reporting client id."""
     store: dict[str, Any] = hass.data.setdefault(DOMAIN, {}).setdefault(BRIDGE_DATA_KEY, {})
     client = str(report.get("url") or report.get("ua") or "unknown")[:120]
-    store[client] = {"received": datetime.now(UTC).isoformat(), "report": report}
+    store[client] = {"received": received or datetime.now(UTC).isoformat(), "report": report}
     try:
         payload = json.dumps({k: v for k, v in store.items()}, indent=2, ensure_ascii=False, default=str)
         Path(hass.config.path("vidaa_bridge_report.json")).write_text(payload, encoding="utf-8")
     except OSError as err:
         _LOGGER.debug("Could not persist bridge report file: %s", err)
+
+
+def _bounded_dict(value: Any, max_items: int, value_len: int) -> dict[str, str]:
+    """Stringify a mapping with per-value length caps (no JSON round-trip)."""
+    if not isinstance(value, dict):
+        return {}
+    return {str(k)[:120]: str(v)[:value_len] for k, v in list(value.items())[:max_items]}
+
+
+def build_report_summary(report: dict[str, Any], received: str) -> dict[str, Any]:
+    """Build a bounded summary of a report for entity attributes (size-capped)."""
+    reads = report.get("reads") or {}
+    clipped_reads: dict[str, Any] = {}
+    for key, entry in list(reads.items())[:20]:
+        if isinstance(entry, dict):
+            clipped_reads[str(key)[:120]] = {
+                "ok": str(entry.get("ok"))[:500] if entry.get("ok") is not None else None,
+                "err": str(entry.get("err"))[:150] if entry.get("err") is not None else None,
+            }
+        else:
+            clipped_reads[str(key)[:120]] = str(entry)[:150]
+    services = report.get("services") if isinstance(report.get("services"), dict) else {}
+    initial = services.get("initialData")
+    return {
+        "received": received,
+        "t": str(report.get("t", ""))[:40],
+        "ua": str(report.get("ua", ""))[:160],
+        "bridge_http": _bounded_dict(report.get("bridge_http"), 10, 200),
+        "wss9888": str(report.get("wss9888"))[:80],
+        "fileread_variant": str(report.get("fileread_variant"))[:40],
+        "reads": clipped_reads,
+        "initialData": _bounded_dict(initial, 40, 150) if isinstance(initial, dict) else str(initial)[:300],
+        "bridge_globals": _bounded_dict(report.get("bridge_globals"), 20, 40),
+        "tvinfo_setters": [str(s)[:80] for s in (report.get("tvinfo_setters") or [])[:40]]
+        if isinstance(report.get("tvinfo_setters"), list) else [],
+        "pkglist": _bounded_dict(report.get("pkglist_trunc"), 6, 300)
+        if isinstance(report.get("pkglist_trunc"), dict) else str(report.get("pkglist_trunc"))[:300],
+        "errors": [str(e)[:100] for e in (report.get("errors") or [])[:10]]
+        if isinstance(report.get("errors"), list) else [],
+    }
+
+
+def get_bridge_summary(hass: HomeAssistant) -> dict[str, Any] | None:
+    """Latest bounded bridge-report summary, for entity attributes."""
+    data = getattr(hass, "data", None)
+    if not isinstance(data, dict):
+        return None
+    summary = data.get(DOMAIN, {}).get(BRIDGE_SUMMARY_KEY)
+    return summary if isinstance(summary, dict) else None
+
+
+def register_bridge_entity(hass: HomeAssistant, entity: Any) -> None:
+    """Track an entity that re-publishes the bridge summary on new reports."""
+    data = getattr(hass, "data", None)
+    if not isinstance(data, dict):
+        return
+    entity_set: set[Any] = data.setdefault(DOMAIN, {}).setdefault(BRIDGE_ENTITY_KEY, set())
+    entity_set.add(entity)
+
+
+def unregister_bridge_entity(hass: HomeAssistant, entity: Any) -> None:
+    """Drop an entity from bridge-summary republishing."""
+    data = getattr(hass, "data", None)
+    if not isinstance(data, dict):
+        return
+    entity_set: set[Any] = data.setdefault(DOMAIN, {}).setdefault(BRIDGE_ENTITY_KEY, set())
+    entity_set.discard(entity)
+
+
+def _publish_report(hass: HomeAssistant, report: dict[str, Any]) -> None:
+    """Store, summarize, persist and republish a received report."""
+    received = datetime.now(UTC).isoformat()
+    _store_report(hass, report, received)
+    hass.data.setdefault(DOMAIN, {})[BRIDGE_SUMMARY_KEY] = build_report_summary(report, received)
+    for entity in list(hass.data.get(DOMAIN, {}).get(BRIDGE_ENTITY_KEY, ())):
+        try:
+            entity.async_write_ha_state()
+        except Exception as err:
+            _LOGGER.debug("Could not republish bridge summary: %s", err)
 
 
 async def async_setup_bridge_http(hass: HomeAssistant) -> bool:
@@ -134,9 +217,9 @@ async def async_setup_bridge_http(hass: HomeAssistant) -> bool:
             report = normalize_report(body)
             if report is None:
                 return web.Response(status=400, text="invalid report")
-            await hass.async_add_executor_job(_store_report, hass, report)
+            await hass.async_add_executor_job(_publish_report, hass, report)
             for line in summarize_report(report):
-                _LOGGER.info("VIDAA bridge: %s", line)
+                _LOGGER.warning("VIDAA bridge: %s", line)
             return web.Response(text="REPORT_SAVED")
 
     registered = 0

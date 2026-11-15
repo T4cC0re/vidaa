@@ -28,6 +28,7 @@ from ..const import (
     DEFAULT_INCLUDE_APPS_IN_SOURCES,
 )
 from ..entity import VidaaEntity
+from ..http import get_bridge_summary, register_bridge_entity, unregister_bridge_entity
 from ..tv.media import (
     build_media_channel_label,
     build_media_player_current_source,
@@ -88,6 +89,7 @@ class VidaaMediaPlayer(
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks and query initial state when entity is added."""
+        register_bridge_entity(self.hass, self)
         self._client.register_connected_callback(self._handle_connected)
         self._client.register_state_callback(self._handle_state_update)
         self._client.register_volume_callback(self._handle_volume_update)
@@ -116,6 +118,7 @@ class VidaaMediaPlayer(
 
     async def async_will_remove_from_hass(self) -> None:
         """Unregister callbacks when entity is removed."""
+        unregister_bridge_entity(self.hass, self)
         if self._debounce_handle:
             self._debounce_handle.cancel()
             self._debounce_handle = None
@@ -173,6 +176,9 @@ class VidaaMediaPlayer(
             attributes["custom_labels"] = custom_labels
         if self._channel_infos:
             attributes["channel_infos"] = self._channel_infos
+        bridge_summary = get_bridge_summary(getattr(self, "hass", None))
+        if bridge_summary:
+            attributes["bridge_report"] = bridge_summary
         return attributes
 
     def _resolve_active_app_info(self) -> dict[str, Any] | None:

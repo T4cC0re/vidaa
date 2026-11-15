@@ -9,9 +9,14 @@ import pytest
 from custom_components.vidaa.http import (
     BRIDGE_PAGE_PATH,
     BRIDGE_REPORT_PATH,
+    _publish_report,
+    build_report_summary,
+    get_bridge_summary,
     load_bridge_page,
     normalize_report,
+    register_bridge_entity,
     summarize_report,
+    unregister_bridge_entity,
 )
 
 
@@ -80,3 +85,59 @@ async def test_bridge_setup_skips_without_http_component() -> None:
     hass = SimpleNamespace(data={}, http=None, config=SimpleNamespace(path=lambda p: p))
     result = await async_setup_bridge_http(hass)
     assert result is False
+
+
+def _fake_hass(tmp_path=None) -> object:
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    base = Path(tmp_path or ".")
+    return SimpleNamespace(data={}, config=SimpleNamespace(path=lambda p: str(base / p)))
+
+
+def test_build_report_summary_bounds_and_maps_fields() -> None:
+    report = {
+        "t": "2026-11-15T00:00:00Z",
+        "ua": "Chromium 111" + "x" * 500,
+        "bridge_http": {"9009": "answering", "9888": "ERR x" * 100},
+        "wss9888": "open",
+        "fileread_variant": "array",
+        "reads": {f"../p/{i}": {"ok": "A" * 2000} for i in range(40)},
+        "services": {"initialData": {"modelName": "85U75LEVS"}},
+        "bridge_globals": {"vowOS": "object"},
+        "tvinfo_setters": ["setBrightness"] * 200,
+        "pkglist_trunc": {"count": 9, "has_jsservice_basic": True},
+        "errors": ["e1"],
+    }
+    summary = build_report_summary(report, "2026-11-15T00:00:01Z")
+    assert summary["received"] == "2026-11-15T00:00:01Z"
+    assert summary["fileread_variant"] == "array"
+    assert len(summary["reads"]) <= 20
+    assert all(len(str(v.get("ok"))) <= 500 for v in summary["reads"].values())
+    assert summary["initialData"] == {"modelName": "85U75LEVS"}
+    assert len(json.dumps(summary)) < 20000
+
+
+def test_publish_report_stores_summaries_and_republishes_entities(tmp_path) -> None:
+    hass = _fake_hass(tmp_path)
+
+    class FakeEntity:
+        writes = 0
+
+        def async_write_ha_state(self) -> None:
+            FakeEntity.writes += 1
+
+    ent = FakeEntity()
+    register_bridge_entity(hass, ent)
+    _publish_report(hass, {"t": "x", "url": "http://tv/", "reads": {"../proc/self/status": {"ok": "Uid:\t314"}}})
+    assert FakeEntity.writes == 1
+    summary = get_bridge_summary(hass)
+    assert summary is not None
+    assert "Uid:" in str(summary["reads"]["../proc/self/status"]["ok"])
+    unregister_bridge_entity(hass, ent)
+    _publish_report(hass, {"t": "y", "url": "http://tv/"})
+    assert FakeEntity.writes == 1
+
+
+def test_get_bridge_summary_absent_returns_none() -> None:
+    assert get_bridge_summary(_fake_hass()) is None
