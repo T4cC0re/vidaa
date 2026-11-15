@@ -54,6 +54,7 @@ from .const import (
     DOMAIN,
     LEGACY_DOMAIN,
 )
+from .http import async_setup_bridge_http
 from .protocol import resolve_ca_certificate, resolve_certificates
 from .services import async_setup_services, async_unload_services
 
@@ -218,6 +219,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: HisenseVidaaConfigEntry)
     # async_setup is never called again (e.g. after an options reload).  Keep
     # the registration idempotent and re-assert it on every setup.
     await async_setup_services(hass)
+
+    # TV browser bridge page (GET /vidaa/exploit) + report sink; idempotent,
+    # self-skips when the HTTP component is unavailable.
+    await async_setup_bridge_http(hass)
 
     data = entry.data
     mac = data.get(CONF_MAC_ADDRESS)

