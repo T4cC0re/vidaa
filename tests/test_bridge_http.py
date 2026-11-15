@@ -247,10 +247,10 @@ def test_validate_task_rejects_write_and_out_of_scope() -> None:
                           "args": {"url": "http://h/vidaa/exploit/p/a",
                                    "directory": "/APPS/installer.ipk", "permission": 999}}) is not None
     # fetchFile over ws framing is not the canonical channel -> rejected
-    assert "not allowed" in (validate_task({"op": "ws", "target": "wss://localhost:9888",
-                                            "messages": [{"path": "phoenix://service/basic/fetcher",
-                                                          "method": "callAPI",
-                                                          "parameters": {"api": "fetchFile", "args": {}}}]}) or "")
+    assert "svc op" in (validate_task({"op": "ws", "target": "wss://localhost:9888",
+                                       "messages": [{"path": "phoenix://service/basic/fetcher",
+                                                     "method": "callAPI",
+                                                     "parameters": {"api": "fetchFile", "args": {}}}]}) or "")
     # fn: superwatch proxy op, install/uninstall framing only
     assert validate_task({"op": "fn", "fnpath": "basic/fetch/sw2",
                           "list": ["90:83:90;re.installer",
