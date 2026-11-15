@@ -229,6 +229,7 @@ def test_validate_task_matrix() -> None:
 
 def test_validate_task_rejects_write_and_out_of_scope() -> None:
     assert "not allowed" in (validate_task({"op": "eval"}) or "")
+    assert "args object" in (validate_task({"op": "svc", "svc": "basic/fetcher", "api": "fetchFile"}) or "")
     assert "getter" in (validate_task({"op": "jsapi", "fn": "Hisense_SetPictureMode"}) or "")
     assert "getter" in (validate_task({"op": "jsapi", "fn": "TvInfo_setParam"}) or "")
     assert "getter" in (validate_task({"op": "jsapi", "fn": "His_restart"}) or "")
@@ -262,6 +263,8 @@ def test_validate_task_rejects_write_and_out_of_scope() -> None:
     assert validate_task({"op": "fn", "fnpath": "basic/fetch/sw2", "list": []}) is not None
     assert validate_task({"op": "fn", "fnpath": "basic/fetch/sw2",
                           "list": ["90:82:90;`rm -rf /`"]}) is not None
+    assert validate_task({"op": "fn", "fnpath": "basic/fetch/sw2",
+                          "list": ["90:83:90;re.installer", "91:82:91;/APPS/installer.ipk;re.installer;"]}) is None
     assert "not allowed" in (validate_task({"op": "svc", "svc": "basic/fetcher", "api": "fetchFile"}) or "")
     assert "not allowed" in (validate_task({"op": "svc", "svc": "tvinfo", "api": "setBrightness"}) or "")
     assert "native lane" in (validate_task({"op": "native", "api": "fileWrite"}) or "")

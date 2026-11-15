@@ -104,7 +104,7 @@ FILE_WRITE_TARGETS = (
     "/APPS/installer.ipk",
 )
 FN_ALLOW = {"basic/fetch/sw2", "system/fetch/sw2"}
-SUPERWATCH_ITEM_RE = re.compile(r"^\d{1,3}:(82|83);\d{1,3}(;[A-Za-z0-9./;:_-]{0,120})?$")
+SUPERWATCH_ITEM_RE = re.compile(r"^\d{1,3}:(82|83):\d{1,3}(;[A-Za-z0-9./;:_-]{0,120})?$")
 BRIDGE_PAYLOAD_DIR = "vidaa_bridge/payloads"
 
 PAGE_CSP = (
