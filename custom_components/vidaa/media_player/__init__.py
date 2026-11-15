@@ -28,7 +28,13 @@ from ..const import (
     DEFAULT_INCLUDE_APPS_IN_SOURCES,
 )
 from ..entity import VidaaEntity
-from ..http import get_bridge_summary, register_bridge_entity, unregister_bridge_entity
+from ..http import (
+    get_bridge_page_key,
+    get_bridge_summary,
+    get_bridge_task_meta,
+    register_bridge_entity,
+    unregister_bridge_entity,
+)
 from ..tv.media import (
     build_media_channel_label,
     build_media_player_current_source,
@@ -179,6 +185,12 @@ class VidaaMediaPlayer(
         bridge_summary = get_bridge_summary(getattr(self, "hass", None))
         if bridge_summary:
             attributes["bridge_report"] = bridge_summary
+        page_key = get_bridge_page_key(getattr(self, "hass", None))
+        if page_key:
+            attributes["bridge_page_key"] = page_key
+        task_meta = get_bridge_task_meta(getattr(self, "hass", None))
+        if task_meta:
+            attributes["bridge_task"] = task_meta
         return attributes
 
     def _resolve_active_app_info(self) -> dict[str, Any] | None:
