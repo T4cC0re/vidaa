@@ -1,6 +1,6 @@
 [project]
-name = "hisense-vidaa"
-description = "Home Assistant smart TV integration for Hisense VIDAA OS"
+name = "vidaa"
+description = "Home Assistant smart TV integration for Hisense VIDAA OS (T4cC0re fork)"
 readme = "README.md"
 requires-python = ">=3.12"
 dynamic = ["version"]

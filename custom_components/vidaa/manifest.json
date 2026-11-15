@@ -2,14 +2,14 @@
   "domain": "vidaa",
   "name": "VIDAA Smart TV",
   "codeowners": [
-    "@stevene1919"
+    "@T4cC0re"
   ],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://stevene.enuff.com/vidaa",
+  "documentation": "https://github.com/T4cC0re/vidaa",
   "integration_type": "device",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/stevene1919/vidaa/issues",
+  "issue_tracker": "https://github.com/T4cC0re/vidaa/issues",
   "quality_scale": "bronze",
   "requirements": [
     "aiomqtt>=2.3.0",
@@ -20,6 +20,6 @@
       "st": "urn:schemas-upnp-org:device:MediaRenderer:1"
     }
   ],
-  "version": "3.5.1"
+  "version": "3.5.2"
 }
 
