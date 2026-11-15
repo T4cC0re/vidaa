@@ -2,6 +2,22 @@
 
 All notable changes to the VIDAA Smart TV integration will be documented in this file.
 
+## [3.5.2] - 2026-11-15 — 🍴 T4cC0re Fork (Hisense U7NQ tailoring)
+
+Personal fork of `stevene1919/vidaa` maintained for a Hisense **U7NQ** (VIDAA 2024/2025 generation) and installed from the `main` branch via the Home Assistant **Marketplace**.
+
+### 📦 Packaging & Installation
+
+- **Bundled VIDAA mTLS client certificate**: the universal `client_mobile_android.p12` / `El.p12` keystore, its converted `hisense.crt`/`hisense.key` PEM pair, and the `remote_ca.pem` root now ship inside `custom_components/vidaa/certs/` and are auto-discovered at runtime. No APK extraction and no manual `/config/ssl/` placement is required anymore (user files in `/config/ssl/` still take priority over the bundled ones).
+- **Branch installation for the Marketplace**: removed `zip_release`/`filename` from `hacs.json` — the fork is consumed directly from `main` via *Add custom repository*; GitHub Actions are disabled in this fork and no releases are published.
+- Removed the `.pre-commit-config.yaml` hook configuration (validation stays an ad-hoc developer concern).
+- Fork identity: manifest codeowners/issue tracker/documentation point at the fork, package name in `pyproject.toml` renamed from the stale `hisense-vidaa` to `vidaa`, and README/docs/i18n rebranded to Marketplace terminology with the upstream credit preserved.
+
+### 🎛️ Defaults validated against the Hisense U7NQ
+
+- **`DEFAULT_AUTH_PROFILE` is now `modern`** — live-verified on the U7NQ: TLSv1.3 mTLS handshake with the bundled cert succeeds and the modern XOR-dynamic pairing is accepted (`rc=0`; legacy/middle/remotenow profiles are rejected with `rc=135`). Strict verification against `remote_ca.pem` also passes.
+- **`DEFAULT_ENABLE_PICTURE_CONTROLS` and `DEFAULT_ENABLE_SOUND_CONTROLS` are now enabled** by default (per-entry opt-out remains available in the options flow).
+
 ## [3.5.1] - 2026-11-14
 
 ### ☕ Support the Project

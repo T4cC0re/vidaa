@@ -11,7 +11,7 @@ The integration includes two standalone Python CLI utilities that share 100% of 
 Clone the repository and run the scripts directly from the `scripts/` directory:
 
 ```bash
-git clone https://github.com/stevene1919/hisense_vidaa.git
+git clone https://github.com/T4cC0re/vidaa.git
 cd hisense_vidaa
 pip install aiomqtt defusedxml cryptography pytest
 
@@ -27,15 +27,15 @@ python3 scripts/test_client.py probe --ip <TV_IP>
 
 ### Option B: Inside Home Assistant (Terminal / SSH Addon)
 
-If you installed the integration via HACS, you can download `test_client.py` and/or `debug_tv.py` directly into your `/config` directory:
+If you installed the integration via the Marketplace, you can download `test_client.py` and/or `debug_tv.py` directly into your `/config` directory:
 
 ```bash
 cd /config
 # Download test_client.py:
-curl -sSL https://raw.githubusercontent.com/stevene1919/hisense_vidaa/main/scripts/test_client.py -o test_client.py
+curl -sSL https://raw.githubusercontent.com/T4cC0re/vidaa/main/scripts/test_client.py -o test_client.py
 
 # Download debug_tv.py (optional live debugger):
-curl -sSL https://raw.githubusercontent.com/stevene1919/hisense_vidaa/main/scripts/debug_tv.py -o debug_tv.py
+curl -sSL https://raw.githubusercontent.com/T4cC0re/vidaa/main/scripts/debug_tv.py -o debug_tv.py
 
 # Run probe (automatically links to /config/custom_components/vidaa):
 python3 test_client.py probe --ip <TV_IP>

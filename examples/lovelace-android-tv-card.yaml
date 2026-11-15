@@ -2,7 +2,7 @@
 # Hisense VIDAA TV - Android TV Card Configuration
 # ==============================================================================
 # Prerequisites:
-# 1. Install 'android-tv-card' from HACS (https://github.com/Nerwyn/android-tv-card)
+# 1. Install 'android-tv-card' from the Marketplace (https://github.com/Nerwyn/android-tv-card)
 # 2. Replace 'remote.living_room_hisense_vidaa_tv_remote' and 'media_player.living_room_hisense_vidaa_tv'
 #    with your actual entity IDs.
 # ==============================================================================

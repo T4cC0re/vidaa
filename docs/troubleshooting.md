@@ -103,4 +103,4 @@ If you continue to experience problems:
 1. Enable the integration's diagnostic switch: `switch.<tv_name>_debug_logging`.
 2. Reproduce the problem (e.g. attempt to turn on, send a key, or change inputs).
 3. Download the sanitized diagnostic file from **Settings** → **Devices & Services** → **VIDAA Smart TV** → **⋮** → **Download diagnostics**.
-4. Open an issue on GitHub: [`https://github.com/stevene1919/hisense_vidaa/issues`](https://github.com/stevene1919/hisense_vidaa/issues) and attach the sanitized diagnostics JSON file along with relevant log excerpts.
+4. Open an issue on GitHub: [`https://github.com/T4cC0re/vidaa/issues`](https://github.com/T4cC0re/vidaa/issues) and attach the sanitized diagnostics JSON file along with relevant log excerpts.

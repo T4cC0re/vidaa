@@ -3,7 +3,7 @@
 This guide covers advanced deployment methods for the **VIDAA Smart TV Integration**, including direct Git cloning, tracking pre-release/beta branches, Git submodule management, air-gapped offline installations, standalone CLI diagnostics, and clean uninstallation.
 
 > [!NOTE]
-> For standard installations, using **HACS** (Home Assistant Community Store) or extracting the official release archive is recommended. See [Beginner's Quick Start Guide](quick_start_beginners.md).
+> For standard installations, using the Home Assistant **Marketplace** (add this fork as a custom repository) is recommended. See [Beginner's Quick Start Guide](quick_start_beginners.md).
 
 ---
 
@@ -11,7 +11,7 @@ This guide covers advanced deployment methods for the **VIDAA Smart TV Integrati
 
 | Method | Target Audience | Primary Use Case |
 | :--- | :--- | :--- |
-| **[1. Git Clone Deployment](#1-git-clone-deployment)** | Power users, developers | Track cutting-edge fixes on `main` before HACS releases |
+| **[1. Git Clone Deployment](#1-git-clone-deployment)** | Power users, developers | Track cutting-edge fixes on `main` before the Marketplace syncs them |
 | **[2. Testing Pre-Release Branches](#2-testing-pre-release-branches)** | Testers, bug reporters | Verify PRs and bug fix branches (e.g. `feat/ssl-cert-validation`) |
 | **[3. Git Submodule Integration](#3-git-submodule-integration)** | Infrastructure-as-code users | Manage `/config` as a version-controlled monorepo |
 | **[4. Standalone CLI Diagnostics](#4-standalone-cli-diagnostics-without-home-assistant)** | Network & TV debuggers | Test TLS, pairing, and UPnP without running Home Assistant |
@@ -22,7 +22,7 @@ This guide covers advanced deployment methods for the **VIDAA Smart TV Integrati
 
 ## 1. Git Clone Deployment
 
-Deploying via Git allows you to pull updates directly using `git pull` without waiting for HACS releases.
+Deploying via Git allows you to pull updates directly using `git pull` without waiting for the Marketplace to refresh the custom repository.
 
 ### Architecture Warning (Avoid Nested Component Collision)
 The repository root contains developer tooling (`test_client.py`, tests, documentation, and metadata). Home Assistant expects the component directory to be located at:
@@ -44,7 +44,7 @@ Clone the repository into a separate scratch or projects folder, and symlink the
 cd /config
 
 # 2. Clone the repository into a development directory
-git clone https://github.com/stevene1919/hisense_vidaa.git hisense_vidaa_repo
+git clone https://github.com/T4cC0re/vidaa.git hisense_vidaa_repo
 
 # 3. Create the custom_components directory if it does not exist
 mkdir -p custom_components
@@ -96,7 +96,7 @@ If you track your entire Home Assistant `/config` folder in a private Git reposi
 cd /config
 
 # Add the integration as a Git submodule inside your components directory
-git submodule add https://github.com/stevene1919/hisense_vidaa.git custom_components/hisense_vidaa_submodule
+git submodule add https://github.com/T4cC0re/vidaa.git custom_components/hisense_vidaa_submodule
 
 # Symlink the inner component
 ln -s hisense_vidaa_submodule/custom_components/vidaa custom_components/vidaa
@@ -121,7 +121,7 @@ The repository includes standalone diagnostic utilities ([`scripts/test_client.p
 
 ```bash
 # 1. Clone the repository on your workstation or laptop
-git clone https://github.com/stevene1919/hisense_vidaa.git
+git clone https://github.com/T4cC0re/vidaa.git
 cd hisense_vidaa
 
 # 2. Create and activate a Python virtual environment
@@ -160,7 +160,7 @@ python3 scripts/test_client.py auth --ip 192.168.50.12 --profile auto
 For privacy-centric smart homes where Home Assistant and the TV operate on an isolated IoT VLAN without internet access:
 
 1. **Download Release Archive on an Internet-Connected Machine**:
-   - Download `vidaa.zip` from the [Latest Releases](https://github.com/stevene1919/hisense_vidaa/releases).
+   - Download `vidaa.zip` from the [Latest Releases](https://github.com/T4cC0re/vidaa/releases).
 2. **Transfer to Home Assistant Host**:
    - Via Secure Copy (`scp`):
      ```bash
@@ -199,8 +199,8 @@ If you placed client certificates or key files in `/config/ssl/vidaa/` (or `/con
 2. Delete the certificate files from the directory (e.g. `rm -rf /config/ssl/vidaa` or delete `El.p12`).
 
 ### 6.3 Uninstall Component
-- **Via HACS (Recommended)**:
-  1. Navigate to **HACS → Integrations**.
+- **Via the Marketplace (Recommended)**:
+  1. Navigate to **Settings → Devices & Services → Marketplace → Installed**.
   2. Find **VIDAA Smart TV** in the list of installed integrations.
   3. Click the three vertical dots (`⋮`) on the integration row and select **Remove**.
   4. Confirm the removal.

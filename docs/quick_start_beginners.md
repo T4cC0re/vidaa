@@ -11,12 +11,11 @@ Welcome! This guide is designed for **first-time users and beginners**. It skips
 ## 🎯 What You Will Need
 
 1. **A computer with a web browser** (Windows, Mac, or Linux).
-2. **Access to your Home Assistant files** (via the **File Editor** add-on, **Studio Code Server**, or a **Samba / Windows Share**).
-3. **Your TV turned on and connected to the same Wi-Fi / home network** as Home Assistant.
+2. **Your TV turned on and connected to the same Wi-Fi / home network** as Home Assistant.
 
 > [!IMPORTANT]
-> **No Android Phone or Tablet Required!**  
-> We only download the free mobile app package because Hisense bundled the TV's communication key inside it. An `.apk` file is just a standard `.zip` file—you can open it on your PC or Mac without owning or using Android.
+> **No APK download, no file uploads, no Android device needed!**  
+> This fork ships the universal VIDAA client certificate *inside the integration package* (`custom_components/vidaa/certs/`), so the manual `client_mobile_android.p12` extraction and `/config/ssl/` placement steps of the original upstream guide are not required.
 
 ---
 
@@ -24,66 +23,46 @@ Welcome! This guide is designed for **first-time users and beginners**. It skips
 
 ```mermaid
 flowchart LR
-    Step1["Step 1: Grab File<br/>(Download & Unzip)"] --> Step2["Step 2: Drop into HA<br/>(/config/ssl/)"] --> Step3["Step 3: Pair with PIN<br/>(4-Digit TV Code)"]
+    Step1["Step 1: Add Fork to<br/>(HA Marketplace)"] --> Step2["Step 2: Download<br/>(cert is bundled)"] --> Step3["Step 3: Pair with PIN<br/>(4-Digit TV Code)"]
 ```
 
 ---
 
-### Step 1: Download & Extract the Certificate File (`client_mobile_android.p12` or `El.p12`)
+### Step 1: Add This Fork to the Home Assistant Marketplace
 
-1. On your computer (PC, Mac, or laptop), open your web browser.
-2. Go to a public mirror site (like [APKMirror.com](https://www.apkmirror.com/apk/vidaa-usa-inc/vidaa-smart-tv/)) and download the free **VIDAA Smart TV** app:
-   - Search: **VIDAA Smart TV** (by *VIDAA USA, Inc.*)
-   - Download the `.apk` file (it is completely free).
-3. Extract the key file:
-   - **On Windows**:
-     1. Right-click the downloaded file and rename the ending from `.apk` to `.zip` (e.g., `app.apk` ➔ `app.zip`).
-     2. Double-click `app.zip` to open it.
-     3. Open the `res/raw` folder (or `res`).
-     4. Copy the file named **`client_mobile_android.p12`** (or **`El.p12`** / **`3R.p12`**) to your desktop.
-   - **On Mac**:
-     1. Rename `.apk` to `.zip` and double-click to unzip it.
-     2. Open the `res/raw` folder (or `res`) and copy **`client_mobile_android.p12`** (or **`El.p12`**).
-   - **On Linux / Home Assistant Terminal**:
-     ```bash
-     unzip -j com.universal.remote.multi.apk res/raw/client_mobile_android.p12 -d /config/ssl/
-     # Or if obfuscated in alternative builds:
-     # unzip -j com.universal.remote.multi.apk res/El.p12 -d /config/ssl/
-     ```
+1. In Home Assistant, go to **Settings → Devices & Services**.
+2. Open **Marketplace**, click the **⋮ (three-dot) menu** in the top right, and choose **Add custom repository**.
+3. Enter:
+   - **Repository URL:** `https://github.com/T4cC0re/vidaa`
+   - **Category:** Integration
+   - **Branch/channel:** `main`
+4. Click **Add**.
 
-*(If you ever see `3R.p12` or `El.p12` instead of `client_mobile_android.p12`, those work identically!)*
+> [!NOTE]
+> **No manual certificate step.** The universal VIDAA client certificate (`hisense.crt`/`hisense.key`, plus the `client_mobile_android.p12`/`El.p12` keystore fallbacks and the `remote_ca.pem` root) is bundled inside the integration package and is auto-discovered at runtime. If you prefer your own keypair, you can still drop files into `/config/ssl/` — files there take priority over the bundled ones. See the [Advanced SSL Guide](certificates.md).
 
 ---
 
-### Step 2: Put the Key File into Home Assistant
+### Step 2: Download & Restart
 
-Copy your **`client_mobile_android.p12`** (or **`El.p12`**) file into your Home Assistant **`/config/ssl/`** folder:
+1. Open the **VIDAA Smart TV (T4cC0re fork)** entry in the Marketplace and click **Download**.
+2. Restart Home Assistant if prompted (**Settings → System → Restart**) — fresh integration code loads on restart.
 
-- **Using the File Editor Add-on**:
-  1. Open the File Editor in Home Assistant.
-  2. Navigate into the `ssl` folder (inside `/config/`). If `ssl` doesn't exist, create it.
-  3. Click the **Upload** button (top right) and select `client_mobile_android.p12` from your computer.
-- **Using Samba / Windows Network Share**:
-  1. Open your Home Assistant shared network drive on your PC.
-  2. Open the `ssl` folder and paste `client_mobile_android.p12` inside.
-
-*Home Assistant automatically extracts the certificates from the `.p12` bundle on the fly—no passwords or conversion commands needed!*
+*Home Assistant automatically uses the bundled certificates from the package—no passwords or conversion commands needed!*
 
 ---
 
 ### Step 3: Add the Integration & Enter Your Screen PIN
 
-1. **Restart Home Assistant**:
-   - Go to **Settings → System** and click **Restart** (top right).
-2. **Add the Integration**:
+1. **Add the Integration**:
    - Go to **Settings → Devices & Services**.
    - Click the blue **Add Integration** button in the bottom right corner.
    - Search for **VIDAA Smart TV** and click it.
-3. **Connect to Your TV**:
+2. **Connect to Your TV**:
    - Enter your TV's IP address (e.g. `192.168.1.50`).
-   - Leave **Auth Profile** and **Brand** set to **Auto Detect (Recommended)**.
+   - On the certificate step, just confirm the pre-filled defaults — they point at the bundled certificate pair.
    - Click **Submit**.
-4. **Enter the 4-Digit PIN**:
+3. **Enter the 4-Digit PIN**:
    - Look at your TV screen—a **4-digit PIN code** will appear!
    - Type that 4-digit code into the prompt in Home Assistant.
    - Click **Submit**.

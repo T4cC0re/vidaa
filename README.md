@@ -1,5 +1,8 @@
 # VIDAA Smart TV Integration for Home Assistant
 
+> [!NOTE]
+> **This is a private fork** of [`stevene1919/vidaa`](https://github.com/stevene1919/vidaa), maintained for my own Hisense **U7NQ** (VIDAA 2024/2025 generation) and installed directly from the `main` branch via the Home Assistant **Marketplace** custom-repository flow. Upstream is treated as an unreliable dependency, so this fork pins what works, bundles the VIDAA mTLS client certificate inside the package (no manual `/config/ssl/` step), and defaults to the `modern` auth profile with picture & sound controls enabled. GitHub Actions are intentionally disabled in this fork.
+
 <p align="center">
   <a href="README.md"><img src="https://img.shields.io/badge/🇬🇧_English-blue?style=flat-square" alt="English"></a>
   <a href="docs/i18n/README.de.md"><img src="https://img.shields.io/badge/🇩🇪_Deutsch-gray?style=flat-square" alt="Deutsch"></a>
@@ -10,47 +13,37 @@
   <a href="docs/i18n/README.zh-CN.md"><img src="https://img.shields.io/badge/🇨🇳_简体中文-gray?style=flat-square" alt="简体中文"></a>
 </p>
 
-[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/default)
-[![Documentation](https://img.shields.io/badge/docs-stevene.enuff.com-blue.svg)](https://stevene.enuff.com/vidaa)
-[![GitHub Release](https://img.shields.io/github/v/release/stevene1919/hisense_vidaa)](https://github.com/stevene1919/hisense_vidaa/releases)
-[![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-FF5E5B?style=flat&logo=ko-fi&logoColor=white)](https://ko-fi.com/stevene_)
-[![Validate with HACS](https://github.com/stevene1919/hisense_vidaa/actions/workflows/validate.yml/badge.svg)](https://github.com/stevene1919/hisense_vidaa/actions/workflows/validate.yml)
-[![Lint & Verify](https://github.com/stevene1919/hisense_vidaa/actions/workflows/lint.yml/badge.svg)](https://github.com/stevene1919/hisense_vidaa/actions/workflows/lint.yml)
-
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stevene1919&repository=hisense_vidaa&category=integration)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 A native Home Assistant integration for smart TVs and projectors running **VIDAA OS** (Hisense, Toshiba, Loewe, Philips, Sharp, JVC, TOPTRO, and partner brands).
 
 Connects **directly** to the TV's internal MQTT broker (TLS port `36669`) using client certificates, providing instant local push updates, media player controls, app launching, Wake-on-LAN, and virtual remote navigation without external bridges or cloud dependencies.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/stevene1919/hisense_vidaa/main/assets/screenshots/integration_device.png" alt="VIDAA Smart TV in Home Assistant" width="100%" />
+  <img src="https://raw.githubusercontent.com/T4cC0re/vidaa/main/assets/screenshots/integration_device.png" alt="VIDAA Smart TV in Home Assistant" width="100%" />
 </p>
 
 ---
 
 ## 🔰 Quick Start (Beginners Guide)
 
-Setting up your TV takes less than 3 minutes across 3 simple steps:
+Setting up your TV takes less than 2 minutes across 2 simple steps:
 
-### 1️⃣ Install via HACS
-Click the one-click button below (or search **VIDAA Smart TV** in HACS → Integrations → Download):
+### 1️⃣ Install via the Home Assistant Marketplace
 
-[![Open HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stevene1919&repository=hisense_vidaa&category=integration)
-
-### 2️⃣ Place the Key File (`client_mobile_android.p12` or `El.p12`)
-VIDAA TVs enforce mutual TLS on port 36669. Drop the universal **`client_mobile_android.p12`** (or `El.p12`) file into your Home Assistant **`/config/ssl/`** directory.
-- Download the free public **VIDAA Smart TV** app APK on your PC/Mac browser, rename `.apk` to `.zip`, and extract `res/raw/client_mobile_android.p12` (or `res/El.p12` if obfuscated).
-- *No Android phone, tablet, or emulator is needed!* An `.apk` is simply a standard zip file.
+1. In Home Assistant, go to **Settings → Devices & Services → Marketplace → ⋮ (three-dot menu) → Add custom repository**.
+2. Enter this fork's repository URL (`https://github.com/T4cC0re/vidaa`), set the category to **Integration** and the channel to branch **main**, and add it.
+3. Open the **VIDAA Smart TV (T4cC0re fork)** entry and click **Download**.
+4. Restart Home Assistant if prompted (fresh integration code loads on restart).
 
 > [!TIP]
 > **Need a step-by-step walkthrough?**  
 > See the **[Beginner's Quick Start Guide](docs/quick_start_beginners.md)** for detailed instructions with screenshots and zero terminal commands. (For custom PEM keys and OpenSSL commands, see the [Advanced SSL Guide](docs/certificates.md)).
 
-### 3️⃣ Pair with On-Screen PIN
-1. Restart Home Assistant (`Settings` → `System` → `Restart`).
-2. Go to **Settings → Devices & Services → Add Integration** and search for **VIDAA Smart TV**.
-3. Enter your TV's local IP address and click **Submit**.
+### 2️⃣ Pair with On-Screen PIN
+1. Go to **Settings → Devices & Services → Add Integration** and search for **VIDAA Smart TV**.
+2. Enter your TV's local IP address (e.g. `192.168.1.50` — find it in your router's DHCP client list) and click **Submit**.
+3. The universal **client certificate is bundled inside the integration package** (`custom_components/vidaa/certs/`) — no APK extraction, no `/config/ssl/` file placement. The certificate step's pre-filled defaults already point at the bundled pair; just confirm them.
 4. Type the **4-digit PIN** displayed on your TV screen to complete setup!
 
 > [!IMPORTANT]
@@ -103,7 +96,7 @@ For deep technical details, configuration parameters, and dashboard templates, r
 
 | Guide | Description |
 | :--- | :--- |
-| 🔰 **[Beginner's Quick Start Guide](docs/quick_start_beginners.md)** | 3-minute, zero-jargon setup guide for first-time users (extracting `El.p12` and pairing). |
+| 🔰 **[Beginner's Quick Start Guide](docs/quick_start_beginners.md)** | 3-minute, zero-jargon setup guide for first-time users (bundled certificate and pairing). |
 | ⚙️ **[Configuration & Options Parameters](docs/parameters.md)** | Complete reference for all initial setup fields and Options Flow parameters across all tabs. |
 | ⚡ **[TV Power, Standby & Network Settings](docs/power_and_standby_settings.md)** | Model settings (VIDAA U4–U8, 2024+), two-tier standby architecture, and preventing token loss. |
 | 📱 **[Lovelace Remote Cards & Dashboards](docs/lovelace_cards.md)** | Australian EN2G30H 12-app remote, Classic FTA, Button Card, and Android TV Card templates. |
@@ -148,18 +141,6 @@ See [`TODO.md`](TODO.md) for active development items, planned enhancements, and
 
 ---
 
-## ☕ Support the Project
-
-If this integration makes your smart home better or saved you hours of troubleshooting, consider supporting continued reverse-engineering, maintenance, and new features:
-
-<p align="center">
-  <a href="https://ko-fi.com/stevene_" target="_blank">
-    <img src="https://storage.ko-fi.com/cdn/kofi3.png?v=3" height="44" style="border:0px;height:44px;" alt="Buy Me A Coffee at ko-fi.com" />
-  </a>
-</p>
-
----
-
 ## 🤝 Credits & Acknowledgments
 
-This integration is an independent implementation built upon foundational protocol reverse-engineering research and documentation by the open-source smart home community (including `mqtt-hisensetv` and community research into the Hisense RemoteNOW and VIDAA MQTT protocol).
+This fork builds on the upstream integration by [`stevene1919`](https://github.com/stevene1919), which in turn is an independent implementation built upon foundational protocol reverse-engineering research and documentation by the open-source smart home community (including `mqtt-hisensetv` and community research into the Hisense RemoteNOW and VIDAA MQTT protocol).

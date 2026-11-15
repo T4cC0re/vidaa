@@ -10,12 +10,7 @@
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/🇨🇳_简体中文-gray?style=flat-square" alt="简体中文"></a>
 </p>
 
-[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/default)
-[![Documentation](https://img.shields.io/badge/docs-stevene.enuff.com-blue.svg)](https://stevene.enuff.com/vidaa)
-[![GitHub Release](https://img.shields.io/github/v/release/stevene1919/hisense_vidaa)](https://github.com/stevene1919/hisense_vidaa/releases)
-[![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-FF5E5B?style=flat&logo=ko-fi&logoColor=white)](https://ko-fi.com/stevene_)
-
-[![Відкрийте Home Assistant і перейдіть до репозиторію в HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stevene1919&repository=hisense_vidaa&category=integration)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Офіційна інтеграція Home Assistant для смарт-телевізорів і проекторів на базі **VIDAA OS** (Hisense, Toshiba, Loewe, Philips, Sharp, JVC, TOPTRO та партнерських брендів).
 
@@ -27,19 +22,17 @@
 
 Налаштування займає менше 3 хвилин у 3 простих кроки:
 
-### 1️⃣ Встановлення через HACS
-Натисніть кнопку нижче (або знайдіть **VIDAA Smart TV** у HACS → Інтеграції → Завантажити):
+### 1️⃣ Встановлення через маркетплейс Home Assistant
+1. У Home Assistant відкрийте **Налаштування → Пристрої й сервіси → Маркетплейс → меню ⋮ → Додати власний репозиторій**.
+2. Вкажіть URL цього форку (`https://github.com/T4cC0re/vidaa`), оберіть категорію **Інтеграція** та гілку **main**, потім додайте репозиторій.
+3. Відкрийте запис **VIDAA Smart TV (T4cC0re fork)** і натисніть **Завантажити**.
 
-[![Відкрити HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stevene1919&repository=hisense_vidaa&category=integration)
-
-### 2️⃣ Розміщення файлу ключа (`client_mobile_android.p12` або `El.p12`)
-Телевізорам VIDAA потрібне взаємне шифрування TLS на порту 36669. Скопіюйте універсальний файл **`client_mobile_android.p12`** (або `El.p12`) у каталог Home Assistant **`/config/ssl/`**.
-- Завантажте безкоштовний застосунок **VIDAA Smart TV** (APK) у браузері, перейменуйте `.apk` на `.zip` та видобудьте `res/raw/client_mobile_android.p12` (або `res/El.p12`).
-- *Пристрій Android або емулятор не потрібні!*
+### 2️⃣ Сертифікат – нічого не потрібно
+Універсальний клієнтський сертифікат VIDAA (`hisense.crt`/`hisense.key`, а також `client_mobile_android.p12`/`El.p12`) **включено до пакета інтеграції** (`custom_components/vidaa/certs/`) і виявляється автоматично — вилучення APK і тека `ssl` не потрібні.
 
 > [!TIP]
 > **Потрібна детальна покрокова інструкція?**  
-> Див. **[Посібник для початківців](../quick_start_beginners.md)** зі скріншотами (для PEM-сертифікатів і команд OpenSSL див. [Сертифікати SSL](../certificates.md)).
+> Див. **[Посібник для початківців](../quick_start_beginners.md)** зі скріншотами (для власних PEM-сертифікатів див. [Сертифікати SSL](../certificates.md)).
 
 ### 3️⃣ З'єднання за допомогою PIN-коду на екрані
 1. Перезапустіть Home Assistant (`Налаштування` → `Система` → `Перезапустити`).
@@ -76,7 +69,7 @@
 
 | Посібник | Опис |
 | :--- | :--- |
-| 🔰 **[Швидкий старт для початківців](../quick_start_beginners.md)** | Покрокова інструкція з легким видобуванням `El.p12`. |
+| 🔰 **[Швидкий старт для початківців](../quick_start_beginners.md)** | Покрокова інструкція; сертифікат включено до пакета. |
 | ⚙️ **[Конфігурація та параметри](../parameters.md)** | Повний довідник з усіх параметрів та меню налаштувань. |
 | ⚡ **[Параметри живлення та режиму очікування](../power_and_standby_settings.md)** | Режим очікування, швидкий старт і захист від втрати токенів. |
 | 📱 **[Панелі Lovelace та картки](../lovelace_cards.md)** | Картки пультів, кнопкові картки та шаблони інтерфейсу. |

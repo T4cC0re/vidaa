@@ -2,7 +2,7 @@
 # Hisense VIDAA TV - Button Card Remote Example
 # ==============================================================================
 # Prerequisites:
-# 1. Install 'button-card' from HACS (https://github.com/custom-cards/button-card)
+# 1. Install 'button-card' from the Marketplace (https://github.com/custom-cards/button-card)
 # 2. Replace 'remote.living_room_hisense_vidaa_tv_remote' and 'media_player.living_room_hisense_vidaa_tv'
 #    with your actual entity IDs.
 # ==============================================================================

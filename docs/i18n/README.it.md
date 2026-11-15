@@ -10,12 +10,7 @@
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/🇨🇳_简体中文-gray?style=flat-square" alt="简体中文"></a>
 </p>
 
-[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/default)
-[![Documentation](https://img.shields.io/badge/docs-stevene.enuff.com-blue.svg)](https://stevene.enuff.com/vidaa)
-[![GitHub Release](https://img.shields.io/github/v/release/stevene1919/hisense_vidaa)](https://github.com/stevene1919/hisense_vidaa/releases)
-[![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-FF5E5B?style=flat&logo=ko-fi&logoColor=white)](https://ko-fi.com/stevene_)
-
-[![Apri l'istanza di Home Assistant e apri il repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stevene1919&repository=hisense_vidaa&category=integration)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Integrazione nativa di Home Assistant per Smart TV e proiettori con sistema operativo **VIDAA OS** (Hisense, Toshiba, Loewe, Philips, Sharp, JVC, TOPTRO e marchi partner).
 
@@ -27,19 +22,17 @@ Si connette **direttamente** al broker MQTT interno del televisore (porta TLS `3
 
 La configurazione richiede meno di 3 minuti in 3 semplici passaggi:
 
-### 1️⃣ Installazione tramite HACS
-Fai clic sul pulsante qui sotto (o cerca **VIDAA Smart TV** in HACS → Integrazioni → Scarica):
+### 1️⃣ Installazione tramite il Marketplace di Home Assistant
+1. In Home Assistant vai su **Impostazioni → Dispositivi e servizi → Marketplace → menu ⋮ → Aggiungi repository personalizzato**.
+2. Inserisci l'URL del repository di questo fork (`https://github.com/T4cC0re/vidaa`), scegli la categoria **Integrazione** e il ramo **main**, poi aggiungi il repository.
+3. Apri la voce **VIDAA Smart TV (T4cC0re fork)** e fai clic su **Scarica**.
 
-[![Apri HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stevene1919&repository=hisense_vidaa&category=integration)
-
-### 2️⃣ Posiziona il file della chiave (`client_mobile_android.p12` o `El.p12`)
-I televisori VIDAA richiedono la crittografia reciproca TLS sulla porta 36669. Copia il file universale **`client_mobile_android.p12`** (o `El.p12`) nella cartella **`/config/ssl/`** di Home Assistant.
-- Scarica l'app APK pubblica e gratuita **VIDAA Smart TV** sul tuo browser, rinomina `.apk` in `.zip` ed estrai `res/raw/client_mobile_android.p12` (o `res/El.p12`).
-- *Nessun dispositivo Android o emulatore richiesto!*
+### 2️⃣ Certificato – nulla da fare
+Il certificato client VIDAA universale (`hisense.crt`/`hisense.key` più `client_mobile_android.p12`/`El.p12`) è **incluso nel pacchetto dell'integrazione** (`custom_components/vidaa/certs/`) e viene rilevato automaticamente – nessuna estrazione APK, nessuna cartella `ssl`.
 
 > [!TIP]
 > **Serve una guida passo dopo passo?**  
-> Consulta la **[Guida introduttiva per principianti](../quick_start_beginners.md)** con schermate dettagliate (per chiavi PEM personalizzate e comandi OpenSSL, vedi la [Guida avanzata SSL](../certificates.md)).
+> Consulta la **[Guida introduttiva per principianti](../quick_start_beginners.md)** con schermate dettagliate (per certificati PEM personalizzati, vedi la [Guida avanzata SSL](../certificates.md)).
 
 ### 3️⃣ Associazione con PIN su Schermo
 1. Riavvia Home Assistant (`Impostazioni` → `Sistema` → `Riavvia`).
@@ -76,7 +69,7 @@ Supporta ufficialmente **qualsiasi Smart TV con sistema VIDAA OS** (associazione
 
 | Guida | Descrizione |
 | :--- | :--- |
-| 🔰 **[Guida Rapida Principianti](../quick_start_beginners.md)** | Configurazione in 3 minuti ed estrazione di `El.p12`. |
+| 🔰 **[Guida Rapida Principianti](../quick_start_beginners.md)** | Configurazione guidata; certificato incluso nel pacchetto. |
 | ⚙️ **[Parametri e Opzioni](../parameters.md)** | Riferimento completo a tutte le impostazioni e schede di configurazione. |
 | ⚡ **[Impostazioni di Alimentazione e Standby](../power_and_standby_settings.md)** | Risparmio energetico, avvio rapido e prevenzione della perdita di token. |
 | 📱 **[Schede Lovelace e Dashboard](../lovelace_cards.md)** | Telecomandi grafici, Button Card e template per la dashboard. |

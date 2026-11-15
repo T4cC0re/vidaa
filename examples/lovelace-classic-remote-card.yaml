@@ -5,8 +5,8 @@
 # Free-to-Air broadcast TV, cable, and core navigation without streaming app shortcuts.
 #
 # Requirements:
-#   - HACS: button-card (custom:button-card)
-#   - HACS: card-mod (optional, for enhanced styling)
+#   - Marketplace: button-card (custom:button-card)
+#   - Marketplace: card-mod (optional, for enhanced styling)
 #
 # Replace 'remote.living_room_hisense_vidaa_tv_remote' and 'media_player.living_room_hisense_vidaa_tv'
 # with your actual Hisense VIDAA entity IDs.

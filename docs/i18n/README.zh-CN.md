@@ -10,12 +10,7 @@
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/🇨🇳_简体中文-blue?style=flat-square" alt="简体中文"></a>
 </p>
 
-[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/default)
-[![Documentation](https://img.shields.io/badge/docs-stevene.enuff.com-blue.svg)](https://stevene.enuff.com/vidaa)
-[![GitHub Release](https://img.shields.io/github/v/release/stevene1919/hisense_vidaa)](https://github.com/stevene1919/hisense_vidaa/releases)
-[![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-FF5E5B?style=flat&logo=ko-fi&logoColor=white)](https://ko-fi.com/stevene_)
-
-[![打开 Home Assistant 并在 HACS 中打开该仓库。](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stevene1919&repository=hisense_vidaa&category=integration)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 专为运行 **VIDAA OS** 操作系统的智能电视和投影仪（海信 Hisense、东芝 Toshiba、Loewe、飞利浦 Philips、夏普 Sharp、JVC、TOPTRO 及合作授权品牌）打造的 Home Assistant 原生集成。
 
@@ -27,19 +22,17 @@
 
 只需 3 个简步，3 分钟内完成设置：
 
-### 1️⃣ 通过 HACS 安装
-点击下方按钮（或在 HACS 中搜索 **VIDAA Smart TV** → 集成 → 下载）：
+### 1️⃣ 通过 Home Assistant 应用商店安装
+1. 在 Home Assistant 中前往 **设置 → 设备与服务 → 应用商店 → ⋮ 菜单 → 添加自定义存储库**。
+2. 输入此 fork 的存储库地址 (`https://github.com/T4cC0re/vidaa`)，类别选择 **集成**，分支选择 **main**，然后添加。
+3. 打开 **VIDAA Smart TV (T4cC0re fork)** 条目，点击 **下载**。
 
-[![打开 HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stevene1919&repository=hisense_vidaa&category=integration)
-
-### 2️⃣ 放置证书密钥文件 (`client_mobile_android.p12` 或 `El.p12`)
-VIDAA 电视要求在 36669 端口进行双向 TLS 认证。将通用秘钥文件 **`client_mobile_android.p12`**（或 `El.p12`）放置在 Home Assistant 的 **`/config/ssl/`** 目录中。
-- 在浏览器中下载免费的 **VIDAA Smart TV** 应用安装包（APK），将扩展名 `.apk` 重命名为 `.zip`，解压提取其中的 `res/raw/client_mobile_android.p12`（若被混淆则为 `res/El.p12`）。
-- *无需任何 Android 设备或模拟器！*
+### 2️⃣ 证书 – 无需任何操作
+通用 VIDAA 客户端证书（`hisense.crt`/`hisense.key` 以及 `client_mobile_android.p12`/`El.p12`）**已随集成包捆绑**（`custom_components/vidaa/certs/`），会被自动发现——无需解压 APK，也无需放置 `ssl` 目录。
 
 > [!TIP]
 > **需要图文分步指导？**  
-> 请参阅 **[新手快速入门指南](../quick_start_beginners.md)** 获取完整截图教程（高级 PEM 证书和 OpenSSL 命令请参阅 [SSL 证书指南](../certificates.md)）。
+> 请参阅 **[新手快速入门指南](../quick_start_beginners.md)** 获取完整截图教程（自定义 PEM 证书请参阅 [SSL 证书指南](../certificates.md)）。
 
 ### 3️⃣ 屏幕 PIN 码配对
 1. 重启 Home Assistant（`配置` → `系统` → `重新启动`）。
@@ -76,7 +69,7 @@ VIDAA 电视要求在 36669 端口进行双向 TLS 认证。将通用秘钥文�
 
 | 文档指南 | 说明 |
 | :--- | :--- |
-| 🔰 **[新手快速入门指南](../quick_start_beginners.md)** | 图文分步指导与 `El.p12` 提取教程。 |
+| 🔰 **[新手快速入门指南](../quick_start_beginners.md)** | 图文分步指导；证书已随包捆绑。 |
 | ⚙️ **[配置与选项说明](../parameters.md)** | 所有配置参数与选项菜单详解。 |
 | ⚡ **[电源与待机设置](../power_and_standby_settings.md)** | 待机模式、快速开机与防止配对令牌失效配置。 |
 | 📱 **[Lovelace 仪表盘与卡片](../lovelace_cards.md)** | 遥控器卡片、快捷按钮与界面范例。 |

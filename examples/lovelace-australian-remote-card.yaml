@@ -8,9 +8,9 @@
 # Optimized for Light/Dark themes and Chrome Forced-Dark Mode.
 #
 # Prerequisites:
-# 1. Install 'button-card' from HACS (https://github.com/custom-cards/button-card)
-# 2. Install 'stack-in-card' from HACS (https://github.com/custom-cards/stack-in-card)
-# 3. Install 'card-mod' from HACS (https://github.com/thomasloven/lovelace-card-mod)
+# 1. Install 'button-card' from the Marketplace (https://github.com/custom-cards/button-card)
+# 2. Install 'stack-in-card' from the Marketplace (https://github.com/custom-cards/stack-in-card)
+# 3. Install 'card-mod' from the Marketplace (https://github.com/thomasloven/lovelace-card-mod)
 # 4. Replace 'remote.living_room_hisense_vidaa_tv_remote' and 'media_player.living_room_hisense_vidaa_tv'
 #    with your own entity IDs if needed.
 # ==============================================================================

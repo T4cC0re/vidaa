@@ -10,12 +10,7 @@
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/🇨🇳_简体中文-gray?style=flat-square" alt="简体中文"></a>
 </p>
 
-[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/default)
-[![Documentation](https://img.shields.io/badge/docs-stevene.enuff.com-blue.svg)](https://stevene.enuff.com/vidaa)
-[![GitHub Release](https://img.shields.io/github/v/release/stevene1919/hisense_vidaa)](https://github.com/stevene1919/hisense_vidaa/releases)
-[![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-FF5E5B?style=flat&logo=ko-fi&logoColor=white)](https://ko-fi.com/stevene_)
-
-[![Ouvrez votre instance Home Assistant et ouvrez le dépôt dans HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stevene1919&repository=hisense_vidaa&category=integration)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Une intégration native Home Assistant pour téléviseurs intelligents et projecteurs fonctionnant sous **VIDAA OS** (Hisense, Toshiba, Loewe, Philips, Sharp, JVC, TOPTRO et marques partenaires).
 
@@ -27,19 +22,17 @@ Elle se connecte **directement** au courtier MQTT interne du téléviseur (port 
 
 L'installation prend moins de 3 minutes en 3 étapes simples :
 
-### 1️⃣ Installation via HACS
-Cliquez sur le bouton ci-dessous (ou recherchez **VIDAA Smart TV** dans HACS → Intégrations → Télécharger) :
+### 1️⃣ Installation via le Marketplace Home Assistant
+1. Dans Home Assistant, allez dans **Paramètres → Appareils et services → Marketplace → menu ⋮ → Ajouter un dépôt personnalisé**.
+2. Saisissez l'URL du dépôt de ce fork (`https://github.com/T4cC0re/vidaa`), choisissez la catégorie **Intégration** et la branche **main**, puis ajoutez le dépôt.
+3. Ouvrez l'entrée **VIDAA Smart TV (T4cC0re fork)** et cliquez sur **Télécharger**.
 
-[![Ouvrir HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stevene1919&repository=hisense_vidaa&category=integration)
-
-### 2️⃣ Déposer le fichier de clé (`client_mobile_android.p12` ou `El.p12`)
-Les téléviseurs VIDAA nécessitent une négociation TLS mutuelle sur le port 36669. Copiez le fichier universel **`client_mobile_android.p12`** (ou `El.p12`) dans le dossier **`/config/ssl/`** de Home Assistant.
-- Téléchargez l'application gratuite **VIDAA Smart TV** (APK) dans votre navigateur, renommez `.apk` en `.zip` et extrayez `res/raw/client_mobile_android.p12` (ou `res/El.p12`).
-- *Aucun appareil Android ou émulateur n'est requis !*
+### 2️⃣ Certificat – rien à faire
+Le certificat client universel VIDAA (`hisense.crt`/`hisense.key` ainsi que `client_mobile_android.p12`/`El.p12`) est **inclus dans le paquet d'intégration** (`custom_components/vidaa/certs/`) et est détecté automatiquement – aucune extraction d'APK ni dossier `ssl` nécessaire.
 
 > [!TIP]
 > **Besoin d'instructions pas à pas ?**  
-> Consultez le **[Guide de démarrage rapide pour débutants](../quick_start_beginners.md)** avec captures d'écran (pour les certificats PEM et commandes OpenSSL, voir le [Guide avancé SSL](../certificates.md)).
+> Consultez le **[Guide de démarrage rapide pour débutants](../quick_start_beginners.md)** avec captures d'écran (pour des certificats PEM personnalisés, voir le [Guide avancé SSL](../certificates.md)).
 
 ### 3️⃣ Appairage avec le code PIN à l'écran
 1. Redémarrez Home Assistant (`Paramètres` → `Système` → `Redémarrer`).
@@ -76,7 +69,7 @@ Prend officiellement en charge **tous les téléviseurs sous VIDAA OS** (appaira
 
 | Guide | Description |
 | :--- | :--- |
-| 🔰 **[Guide de démarrage pour débutants](../quick_start_beginners.md)** | Instructions pas à pas avec extraction facile de `El.p12`. |
+| 🔰 **[Guide de démarrage pour débutants](../quick_start_beginners.md)** | Instructions pas à pas ; certificat inclus dans le paquet. |
 | ⚙️ **[Configuration et Options](../parameters.md)** | Référence complète de tous les paramètres et menus de configuration. |
 | ⚡ **[Paramètres d'Alimentation et de Veille](../power_and_standby_settings.md)** | Comportement de veille, démarrage rapide et préservation des jetons d'appairage. |
 | 📱 **[Tableaux de Bord et Cartes Lovelace](../lovelace_cards.md)** | Cartes de télécommande, cartes à boutons et modèles d'interface. |

@@ -14,20 +14,21 @@ VIDAA OS smart TVs enforce mutual TLS (mTLS) or client certificate authenticatio
 > A common misconception is that this integration requires an Android smartphone, tablet, or running mobile app. **It does not.**
 > - **Direct Local Control**: Home Assistant communicates directly across your local network to the TV's hardware MQTT broker. No mobile device is involved at runtime.
 > - **VIDAA OS is Linux**: VIDAA OS is a proprietary embedded Linux OS (not Android TV).
-> - **Why is the Android APK Mentioned?**: Hisense/VIDAA distributes the pre-signed client mutual TLS certificate bundled inside their official companion app package (`.apk`). An APK file is literally just a standard ZIP archive. You can download and unzip it on any PC, Mac, Linux machine, or directly on your Home Assistant terminal to obtain the `.p12` file. You never need an Android device or emulator.
+> - **Why is the Android APK Mentioned?**: Hisense/VIDAA distributes the pre-signed client mutual TLS certificate bundled inside their official companion app package (`.apk`). An APK file is literally just a standard ZIP archive. **In this fork that certificate is already bundled** inside the integration package (`custom_components/vidaa/certs/`), so no APK extraction is needed at all. The APK route is only relevant if you want to verify the bundled files against the vendor original or supply your own copy.
 
 ---
 
-## 📁 Recommended Certificate Location
+## 📁 Certificate Location & Priority
 
-To prevent certificate loss when updating integrations via HACS, certificates should **always** be placed in Home Assistant's dedicated SSL/configuration directories:
+This fork ships the universal VIDAA client certificate inside the integration package — the resolver (`protocol/certs.py`) auto-discovers it by walking up from the package root, so **no manual placement is required**:
 
-1. `/config/ssl/` (Recommended standard HA SSL directory)
-2. `/ssl/`
-3. `/config/certs/`
-4. `/config/`
+1. `custom_components/vidaa/certs/` (**bundled with this fork — used automatically**)
+2. `/config/ssl/`
+3. `/ssl/`
+4. `/config/certs/`
+5. `/config/`
 
-Place your certificate files or PKCS#12 bundles in `/config/ssl/`.
+If you want to override the bundled pair (e.g. your own PEM keypair), drop your certificate files or PKCS#12 bundles into `/config/ssl/` — files found in the user directories above take priority over the bundled ones. Note that Marketplace/repo updates replace the whole integration directory, so custom files should go into `/config/ssl/`, never into the package's `certs/` folder.
 
 ---
 
