@@ -201,6 +201,8 @@ def test_validate_task_matrix() -> None:
     assert validate_task({"op": "globals", "names": ["vowOS"]}) is None
     assert validate_task({"op": "enumerate", "filter": "Picture"}) is None
     assert validate_task({"op": "sleep", "ms": 500}) is None
+    assert validate_task({"op": "jsapi", "fn": "Hisense_GetPictureInfo"}) is None
+    assert validate_task({"op": "jsapi", "fn": "His_getSource", "args": []}) is None
     assert validate_task({"op": "batch", "ops": [{"op": "sleep", "ms": 1},
                                                  {"op": "fileRead", "path": "../x"}]}) is None
     assert validate_task({"op": "ws", "target": "wss://localhost:9888",
@@ -213,6 +215,9 @@ def test_validate_task_matrix() -> None:
 
 def test_validate_task_rejects_write_and_out_of_scope() -> None:
     assert "not allowed" in (validate_task({"op": "eval"}) or "")
+    assert "getter" in (validate_task({"op": "jsapi", "fn": "Hisense_SetPictureMode"}) or "")
+    assert "getter" in (validate_task({"op": "jsapi", "fn": "TvInfo_setParam"}) or "")
+    assert "getter" in (validate_task({"op": "jsapi", "fn": "His_restart"}) or "")
     assert "not allowed" in (validate_task({"op": "svc", "svc": "basic/fetcher", "api": "fetchFile"}) or "")
     assert "not allowed" in (validate_task({"op": "svc", "svc": "tvinfo", "api": "setBrightness"}) or "")
     assert "native lane" in (validate_task({"op": "native", "api": "fileWrite"}) or "")

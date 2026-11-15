@@ -34,6 +34,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
@@ -73,7 +74,8 @@ SVC_ALLOW: dict[str, tuple[str, ...]] = {
     "hiutils": ("getOSVersion", "getVersionStatus", "fileRead"),
     "pkgmgr": ("getInstalledPkgs",),
 }
-TASK_OPS = {"fileRead", "svc", "ws", "native", "globals", "enumerate", "sleep", "batch"}
+TASK_OPS = {"fileRead", "svc", "ws", "native", "globals", "enumerate", "sleep", "batch", "jsapi"}
+JSAPI_GETTER_RE = r"^(?:Hisense_Get|His_get)[A-Za-z0-9_]{0,60}$"
 WS_METHOD_ALLOW = {"start", "callAPI"}
 WS_SVC_ALLOW = set(SVC_ALLOW) | {"basic/fetcher"}
 WS_PORTS = (9009, 9888)
@@ -190,6 +192,12 @@ def validate_task(task: Any, depth: int = 0) -> str | None:
                 api = (msg.get("parameters") or {}).get("api")
                 if svc not in SVC_ALLOW or api not in SVC_ALLOW.get(svc, ()):
                     return f"ws callAPI {svc}.{api} not allowed"
+    elif op == "jsapi":
+        fn = task.get("fn")
+        if not isinstance(fn, str) or not re.match(JSAPI_GETTER_RE, fn):
+            return "jsapi allows vendor getters only (Hisense_Get*/His_get*)"
+        if not isinstance(task.get("args", []), list):
+            return "jsapi args must be a list"
     elif op == "sleep":
         if not (isinstance(task.get("ms"), int) and 0 <= task["ms"] <= 10000):
             return "sleep ms must be an int in [0, 10000]"

