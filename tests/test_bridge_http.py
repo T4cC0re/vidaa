@@ -42,11 +42,12 @@ def test_bridge_page_shipped_and_served_paths() -> None:
 
 
 def test_bridge_page_is_read_only() -> None:
-    """The shipped page must never contain write-capable vendor APIs."""
+    """The shipped page must never contain un-gated write-capable vendor APIs."""
     html = load_bridge_page()
-    for banned in ("fetchFile", "fileWrite", "SetParam", "installApp", "opkg",
+    for banned in ("fileWrite", "SetParam", "installApp", "opkg",
                    "notify_value_changed"):
         assert banned not in html, f"page references write primitive {banned}"
+    assert "fetchFile url must be same-origin" in html  # fetchFile is origin-pinned
 
 
 def test_bridge_page_service_allowlist() -> None:
@@ -231,6 +232,36 @@ def test_validate_task_rejects_write_and_out_of_scope() -> None:
     assert "getter" in (validate_task({"op": "jsapi", "fn": "Hisense_SetPictureMode"}) or "")
     assert "getter" in (validate_task({"op": "jsapi", "fn": "TvInfo_setParam"}) or "")
     assert "getter" in (validate_task({"op": "jsapi", "fn": "His_restart"}) or "")
+    # fetchFile: gated to payload endpoint + chain targets only
+    good_fetch = {"op": "svc", "svc": "basic/fetcher", "api": "fetchFile",
+                  "args": {"url": "http://10.0.0.5:8123/vidaa/exploit/p/sw2.js",
+                           "directory": "/APPS/installer.ipk", "permission": 420}}
+    assert validate_task(good_fetch) is None
+    assert "/vidaa/exploit/p/" in (validate_task({"op": "svc", "svc": "basic/fetcher", "api": "fetchFile",
+                                                  "args": {"url": "http://evil.example/x.js",
+                                                           "directory": "/APPS/installer.ipk"}}) or "")
+    assert "allowlisted" in (validate_task({"op": "svc", "svc": "basic/fetcher", "api": "fetchFile",
+                                            "args": {"url": "http://h:8123/vidaa/exploit/p/a",
+                                                     "directory": "/etc/passwd"}}) or "")
+    assert validate_task({"op": "svc", "svc": "basic/fetcher", "api": "fetchFile",
+                          "args": {"url": "http://h/vidaa/exploit/p/a",
+                                   "directory": "/APPS/installer.ipk", "permission": 999}}) is not None
+    # fetchFile over ws framing is not the canonical channel -> rejected
+    assert "not allowed" in (validate_task({"op": "ws", "target": "wss://localhost:9888",
+                                            "messages": [{"path": "phoenix://service/basic/fetcher",
+                                                          "method": "callAPI",
+                                                          "parameters": {"api": "fetchFile", "args": {}}}]}) or "")
+    # fn: superwatch proxy op, install/uninstall framing only
+    assert validate_task({"op": "fn", "fnpath": "basic/fetch/sw2",
+                          "list": ["90:83:90;re.installer",
+                                   "91:82:91;/APPS/installer.ipk;re.installer;"]}) is None
+    assert "fnpath" in (validate_task({"op": "fn", "fnpath": "basic/fetch/evil",
+                                       "list": ["90:82:90;x"]}) or "")
+    assert "framing" in (validate_task({"op": "fn", "fnpath": "basic/fetch/sw2",
+                                        "list": ["90:99:90;whatever"]}) or "")
+    assert validate_task({"op": "fn", "fnpath": "basic/fetch/sw2", "list": []}) is not None
+    assert validate_task({"op": "fn", "fnpath": "basic/fetch/sw2",
+                          "list": ["90:82:90;`rm -rf /`"]}) is not None
     assert "not allowed" in (validate_task({"op": "svc", "svc": "basic/fetcher", "api": "fetchFile"}) or "")
     assert "not allowed" in (validate_task({"op": "svc", "svc": "tvinfo", "api": "setBrightness"}) or "")
     assert "native lane" in (validate_task({"op": "native", "api": "fileWrite"}) or "")
@@ -274,3 +305,19 @@ def test_get_latest_report_picks_newest(tmp_path) -> None:
     hass.data["vidaa"]["bridge_reports"]["b"]["received"] = "2026-11-15T00:00:00+00:00"
     latest = get_latest_report(hass)
     assert latest and latest["report"]["t"] == "new"
+
+
+def test_payload_roundtrip(tmp_path) -> None:
+    from custom_components.vidaa.http import read_payload, write_payload
+
+    hass = _fake_hass(tmp_path)
+    meta = write_payload(hass, "installer.ipk", b"ar-chive-bytes")
+    assert meta["bytes"] == 14 and meta["sha256_12"]
+    assert read_payload(hass, "installer.ipk") == b"ar-chive-bytes"
+    assert read_payload(hass, "missing.ipk") is None
+    assert read_payload(hass, "../escape") is None
+    try:
+        write_payload(hass, "bad name!", b"x")
+        raise AssertionError("name accepted")
+    except ValueError:
+        pass

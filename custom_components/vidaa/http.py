@@ -23,6 +23,14 @@ Security notes (by design, read before changing):
   inside a fixed interpreter. Tasks are queued with
   ``PUT /vidaa/exploit/task`` + page key and are validated server-side
   against the same read-only service/API allowlist the page enforces.
+- Gated maintenance ops (explicit user consent, root-phase chain on the user's
+  device): payload files under ``<config>/vidaa_bridge/payloads/`` served at
+  ``GET /vidaa/exploit/p/<name>`` (PUT + page key to store); a ``fetchFile``
+  task restricted to pulling ONLY those payloads into fixed chain targets;
+  and an ``fn`` task that may only invoke the two ``*/fetch/sw2`` superwatch
+  proxies with strict install(82)/uninstall(83) framing.
+- Pages auto-reload: the task poll carries a djb2 hash of the served page and
+  the page reloads itself when it changes.
 - Full reports are written to ``<config>/vidaa_bridge_report.json`` (for
   diagnostics/offline analysis), summarized to the log (WARNING level, so it
   survives HAOS journald filtering) and published as the bounded
@@ -73,12 +81,31 @@ SVC_ALLOW: dict[str, tuple[str, ...]] = {
     "tvinfo": ("initialData",),
     "hiutils": ("getOSVersion", "getVersionStatus", "fileRead"),
     "pkgmgr": ("getInstalledPkgs",),
+    "basic/fetcher": ("fetchFile",),
 }
-TASK_OPS = {"fileRead", "svc", "ws", "native", "globals", "enumerate", "sleep", "batch", "jsapi"}
+TASK_OPS = {"fileRead", "svc", "ws", "native", "globals", "enumerate", "sleep", "batch",
+            "jsapi", "fn"}
 JSAPI_GETTER_RE = r"^(?:Hisense_Get|His_get)[A-Za-z0-9_]{0,60}$"
 WS_METHOD_ALLOW = {"start", "callAPI"}
 WS_SVC_ALLOW = set(SVC_ALLOW) | {"basic/fetcher"}
 WS_PORTS = (9009, 9888)
+
+# --- gated maintenance ops (explicit user consent, root phase) -----------------
+# fetchFile is the documented chain primitive: it may ONLY download a payload
+# served by this integration's own /vidaa/exploit/p/ endpoint into one of the
+# exact chain targets. The page additionally pins the url to its own origin.
+PAYLOAD_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+MAX_PAYLOAD_BYTES = 20 * 1024 * 1024
+PAYLOAD_PATH_MARK = "/vidaa/exploit/p/"
+FILE_WRITE_TARGETS = (
+    "/APPS/pkgs/tv.vidaa.jsservice.basic/CHA/functions/fetch/sw2.js",
+    "/APPS/pkgs/tv.vidaa.jsservice.system/CHA/functions/fetch/sw2.js",
+    "/APPS/pkgs/tv.vidaa.jsservice.system/current/functions/fetch/sw2.js",
+    "/APPS/installer.ipk",
+)
+FN_ALLOW = {"basic/fetch/sw2", "system/fetch/sw2"}
+SUPERWATCH_ITEM_RE = re.compile(r"^\d{1,3}:(82|83);\d{1,3}(;[A-Za-z0-9./;:_-]{0,120})?$")
+BRIDGE_PAYLOAD_DIR = "vidaa_bridge/payloads"
 
 PAGE_CSP = (
     "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
@@ -173,6 +200,8 @@ def validate_task(task: Any, depth: int = 0) -> str | None:
         svc, api = task.get("svc"), task.get("api")
         if svc not in SVC_ALLOW or api not in SVC_ALLOW[svc]:
             return f"svc call {svc}.{api} not allowed"
+        if svc == "basic/fetcher":
+            return _validate_fetch_args(task.get("args"))
     elif op == "fileRead":
         if not isinstance(task.get("path"), str):
             return "fileRead needs a string path"
@@ -208,6 +237,15 @@ def validate_task(task: Any, depth: int = 0) -> str | None:
             return "jsapi allows vendor getters only (Hisense_Get*/His_get*)"
         if not isinstance(task.get("args", []), list):
             return "jsapi args must be a list"
+    elif op == "fn":
+        if task.get("fnpath") not in FN_ALLOW:
+            return "fnpath not in allowlist"
+        items = task.get("list")
+        if not isinstance(items, list) or not 1 <= len(items) <= 4:
+            return "fn list must be 1-4 items"
+        for item in items:
+            if not isinstance(item, str) or not SUPERWATCH_ITEM_RE.match(item):
+                return "fn item must be '<session>:(82|83);<msg>' superwatch framing"
     elif op == "sleep":
         if not (isinstance(task.get("ms"), int) and 0 <= task["ms"] <= 10000):
             return "sleep ms must be an int in [0, 10000]"
@@ -257,6 +295,52 @@ def next_bridge_task(hass: HomeAssistant, seen_rev: int) -> dict[str, Any] | Non
         cur["delivered"] = datetime.now(UTC).isoformat()
         _republish_bridge_entities(hass)
     return {"rev": cur["rev"], "task": cur.get("task")}
+
+
+def _validate_fetch_args(args: Any) -> str | None:
+    """fetchFile may only pull this instance's payload endpoint to an allowlisted target."""
+    if not isinstance(args, dict):
+        return "fetchFile needs an args object"
+    url = args.get("url")
+    if not isinstance(url, str) or not url.startswith("http://") or PAYLOAD_PATH_MARK not in url:
+        return "fetchFile url must be an http:// URL on this instance's /vidaa/exploit/p/ endpoint"
+    if args.get("directory") not in FILE_WRITE_TARGETS:
+        return "fetchFile directory is not an allowlisted chain target"
+    perm = args.get("permission", 420)
+    if not isinstance(perm, int) or isinstance(perm, bool) or not 0 <= perm <= 511:
+        return "fetchFile permission must be an int in [0, 511]"
+    return None
+
+
+def _payload_path(hass: HomeAssistant, name: str) -> Path | None:
+    if not PAYLOAD_NAME_RE.match(name or ""):
+        return None
+    return Path(hass.config.path(BRIDGE_PAYLOAD_DIR)) / name
+
+
+def read_payload(hass: HomeAssistant, name: str) -> bytes | None:
+    path = _payload_path(hass, name)
+    if path is None or not path.is_file():
+        return None
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+def write_payload(hass: HomeAssistant, name: str, data: bytes) -> dict[str, Any]:
+    path = _payload_path(hass, name)
+    if path is None:
+        raise ValueError("invalid payload name")
+    if len(data) > MAX_PAYLOAD_BYTES:
+        raise ValueError("payload too large")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+    return {"name": name, "bytes": len(data),
+            "sha256_12": hashlib.sha256(data).hexdigest()[:12],
+            "updated": datetime.now(UTC).isoformat()}
 
 
 def get_latest_report(hass: HomeAssistant) -> dict[str, Any] | None:
@@ -575,16 +659,54 @@ async def async_setup_bridge_http(hass: HomeAssistant) -> bool:
             supplied = request.headers.get("x-vidaa-page-key") or request.query.get("key")
             return bool(key) and secrets.compare_digest(str(supplied or ""), key)
 
+    class VidaaBridgePayloadView(HomeAssistantView):
+        """Static payload files for the gated fetchFile op (GET open, PUT + key)."""
+
+        url = "/vidaa/exploit/p/{name}"
+        extra_urls: ClassVar = ["/vidaa/exploit/p/{name}/"]
+        name = "vidaa:exploit:payload"
+        requires_auth = False
+
+        async def get(self, request: Any, name: str) -> Any:
+            from aiohttp import web
+
+            data = read_payload(hass, name)
+            if data is None:
+                return web.Response(status=404, text="no such payload")
+            return web.Response(body=data, content_type="application/octet-stream",
+                                headers={"Cache-Control": "no-store",
+                                         "X-Content-Type-Options": "nosniff"})
+
+        async def put(self, request: Any, name: str) -> Any:
+            from aiohttp import web
+
+            key = get_bridge_page_key(hass)
+            supplied = request.headers.get("x-vidaa-page-key") or request.query.get("key")
+            if not key or not secrets.compare_digest(str(supplied or ""), key):
+                return web.Response(status=401, text="page key required")
+            try:
+                data = await request.read()
+            except Exception:
+                return web.Response(status=400, text="unreadable")
+            try:
+                meta = await hass.async_add_executor_job(write_payload, hass, name, data)
+            except ValueError as err:
+                return web.Response(status=400, text=str(err))
+            _LOGGER.warning("VIDAA bridge: payload %s updated sha256=%s bytes=%s",
+                            name, meta["sha256_12"], meta["bytes"])
+            return web.json_response(meta)
+
     registered = 0
     for view in (VidaaBridgePageView(), VidaaBridgeReportView(), VidaaBridgePagePutView(),
-                 VidaaBridgeTaskView()):
+                 VidaaBridgeTaskView(), VidaaBridgePayloadView()):
         try:
             hass.http.register_view(view)
             registered += 1
         except Exception as err:
             _LOGGER.warning("Could not register bridge view %s: %s", view.url, err)
-    if registered == 4:
+    if registered == 5:
         domain_data["bridge_http_registered"] = True
-        _LOGGER.info("VIDAA bridge views registered: %s, %s, %s and %s",
-                     BRIDGE_PAGE_PATH, BRIDGE_REPORT_PATH, BRIDGE_PAGE_PUT_PATH, BRIDGE_TASK_PATH)
-    return registered == 4
+        _LOGGER.info("VIDAA bridge views registered: %s, %s, %s, %s and %s",
+                     BRIDGE_PAGE_PATH, BRIDGE_REPORT_PATH, BRIDGE_PAGE_PUT_PATH,
+                     BRIDGE_TASK_PATH, "/vidaa/exploit/p/{name}")
+    return registered == 5
